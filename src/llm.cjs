@@ -7,9 +7,10 @@ let context = null;
 let session = null;
 let modelPathConfigured = null;
 
-const RAG_SYSTEM = `You are a JARVIS-style brainstorming assistant with access to the user's Long-Term Memory (LTM).
+const RAG_SYSTEM = `You are a highly analytical engineering assistant with access to the user's Long-Term Memory (LTM).
 Below are relevant past thoughts and technical notes retrieved from their LTM. Use them to inform your response.
-Be concise, technical, and helpful. Reference specific past ideas when relevant.`;
+Be concise, technical, and helpful. Reference specific past ideas when relevant.
+If the user has not given you a name, you may choose one or wait for them to assign one.`;
 
 async function createRagSession(modelPath) {
   console.log('[LLM] createRagSession: called', { modelPath });
@@ -75,7 +76,7 @@ async function streamRagResponse(sessionId, prompt, onChunk) {
 
   const firstSentence = assistantResponse.split(/[.!?\n]/)[0].trim();
   if (!firstSentence) return;
-  const memoryBlock = `Context:\nUser Note: ${prompt}\nJARVIS Insight: ${firstSentence}`;
+  const memoryBlock = `Context:\nUser Note: ${prompt}\nInsight: ${firstSentence}`;
   ingestBrainstorm(memoryBlock, ['auto-memory'])
     .then(() => console.log('✅ Auto-ingested to LTM'))
     .catch((err) => console.error('[LLM] Auto-ingest failed:', err));

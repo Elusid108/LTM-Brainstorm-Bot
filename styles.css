@@ -210,6 +210,31 @@ html, body {
   animation: blink 0.8s ease-in-out infinite;
 }
 
+.bubble.streaming .bubble-content:has(.typing-dots)::after {
+  display: none; /* Hide cursor while typing dots are shown */
+}
+
 @keyframes blink {
   50% { opacity: 0; }
+}
+
+/* Typing dots - pulsing animation */
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+}
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  background-color: var(--accent);
+  border-radius: 50%;
+  animation: typing-pulse 1.4s infinite ease-in-out both;
+}
+.typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+.typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+@keyframes typing-pulse {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
 }

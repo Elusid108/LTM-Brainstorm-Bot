@@ -1,0 +1,19 @@
+# --- AI Models ---
+# These are too big for GitHub and are already on your hard drive.
+/models/
+*.gguf
+
+# --- Node.js & Dependencies ---
+# These can be easily re-installed with 'npm install'
+node_modules/
+package-lock.json
+
+# --- OS & Tool Clutter ---
+.DS_Store
+Thumbs.db
+.cursor/
+*.log
+
+# --- Local Scripts ---
+# Only include this if you don't want others to see your custom startup script
+launch.bat

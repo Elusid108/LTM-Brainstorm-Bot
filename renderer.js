@@ -5,6 +5,52 @@ const statusEl = document.getElementById('status');
 const modelStatusEl = document.getElementById('model-status');
 
 let modelPath = null;
+let activeAssistantBubble = null;
+let isFirstChunk = true;
+let hasStrippedJarvisPrefix = false;
+
+// Stream handlers - registered once to avoid memory leaks
+window.ltm.onStreamChunk((chunk) => {
+  if (!activeAssistantBubble) return;
+  const contentEl = activeAssistantBubble.querySelector('.bubble-content');
+  if (!contentEl) return;
+  if (isFirstChunk) {
+    contentEl.innerHTML = ''; // Clear the typing dots
+    isFirstChunk = false;
+  }
+  contentEl.textContent += chunk;
+  if (!hasStrippedJarvisPrefix && /^JARVIS Insight:\s*/i.test(contentEl.textContent)) {
+    contentEl.textContent = contentEl.textContent.replace(/^JARVIS Insight:\s*/i, '');
+    hasStrippedJarvisPrefix = true;
+  }
+  output.scrollTop = output.scrollHeight;
+});
+
+window.ltm.onStreamDone(() => {
+  console.log('[Renderer] Stream completed');
+  if (activeAssistantBubble) {
+    activeAssistantBubble.classList.remove('streaming');
+  }
+  activeAssistantBubble = null;
+  hasStrippedJarvisPrefix = false;
+  setStatus('Idle');
+  btnChat.disabled = false;
+  input.focus();
+});
+
+window.ltm.onStreamError((err) => {
+  console.error('[Renderer] Stream IPC error:', err);
+  if (activeAssistantBubble) {
+    activeAssistantBubble.classList.remove('streaming');
+    const contentEl = activeAssistantBubble.querySelector('.bubble-content');
+    if (contentEl) contentEl.textContent = `Error: ${err}`;
+  }
+  activeAssistantBubble = null;
+  hasStrippedJarvisPrefix = false;
+  setStatus('Idle');
+  btnChat.disabled = false;
+  input.focus();
+});
 
 // Set default model path and version on load
 window.addEventListener('DOMContentLoaded', async () => {
@@ -46,67 +92,53 @@ async function onChat() {
   const text = input.value.trim();
   if (!text) return;
 
-  if (!modelPath) {
-    console.log('[Renderer] No model path, prompting user');
-    modelPath = prompt('Enter path to your .gguf model file:', '') || await window.ltm.getDefaultModelPath();
-    if (!modelPath) return;
-  }
+  // Immediate UI update - before any await
+  appendLine(text, 'user');
+  input.value = '';
 
-  console.log('[Renderer] Chat: attempting to load model...', { modelPath });
+  const bubble = appendLine('', 'assistant');
+  bubble.classList.add('streaming');
+  const contentEl = bubble.querySelector('.bubble-content');
+  contentEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  activeAssistantBubble = bubble;
+  isFirstChunk = true;
+  hasStrippedJarvisPrefix = false;
+
   setStatus('Initializing RAG…');
   btnChat.disabled = true;
+
+  function showErrorInBubble(msg) {
+    contentEl.innerHTML = '';
+    contentEl.textContent = msg;
+    bubble.classList.remove('streaming');
+    activeAssistantBubble = null;
+    setStatus('Idle');
+    btnChat.disabled = false;
+    input.focus();
+  }
+
+  if (!modelPath) {
+    modelPath = prompt('Enter path to your .gguf model file:', '') || await window.ltm.getDefaultModelPath();
+    if (!modelPath) {
+      showErrorInBubble('Error: No model path configured');
+      return;
+    }
+  }
 
   try {
     const init = await window.ltm.initRagChat(modelPath);
     if (!init.success) {
       console.error('[Renderer] Model load IPC error:', init.error);
-      appendLine(`Error: ${init.error}`, 'system');
-      setStatus('Idle');
-      btnChat.disabled = false;
-      input.focus();
+      showErrorInBubble(`Error: ${init.error}`);
       return;
     }
-    console.log('[Renderer] Model loaded successfully');
-    modelStatusEl.textContent = `Model: loaded`;
-
-    appendLine(text, 'user');
-    input.value = '';
-
-    const bubble = appendLine('', 'assistant');
-    bubble.classList.add('streaming');
-    const contentEl = bubble.querySelector('.bubble-content');
-
-    window.ltm.onStreamChunk((chunk) => {
-      contentEl.textContent += chunk;
-      output.scrollTop = output.scrollHeight;
-    });
-
-    window.ltm.onStreamDone(() => {
-      console.log('[Renderer] Stream completed');
-      bubble.classList.remove('streaming');
-      setStatus('Idle');
-      btnChat.disabled = false;
-      input.focus();
-    });
-
-    window.ltm.onStreamError((err) => {
-      console.error('[Renderer] Stream IPC error:', err);
-      bubble.classList.remove('streaming');
-      contentEl.textContent = `Error: ${err}`;
-      setStatus('Idle');
-      btnChat.disabled = false;
-      input.focus();
-    });
-
+    modelStatusEl.textContent = 'Model: loaded';
     console.log('[Renderer] Stream started');
     setStatus('Streaming…');
     await window.ltm.streamRag(text);
   } catch (e) {
     console.error('[Renderer] Chat exception:', e);
-    appendLine(`Error: ${e.message}`, 'system');
-    setStatus('Idle');
-    btnChat.disabled = false;
-    input.focus();
+    showErrorInBubble(`Error: ${e.message}`);
   }
 }
 
