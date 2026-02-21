@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Base64 Utility Pro</title>
+    <style>
+        :root { --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #c9d1d9; --accent: #58a6ff; --success: #238636; }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); padding: 40px; display: flex; flex-direction: column; align-items: center; }
+        .container { display: flex; gap: 20px; width: 100%; max-width: 1000px; flex-wrap: wrap; }
+        .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; flex: 1; min-width: 450px; display: flex; flex-direction: column; }
+        h2 { margin-top: 0; color: var(--accent); font-size: 1.2rem; }
+        
+        /* Image -> Base64 Styles */
+        #drop-zone { height: 120px; border: 2px dashed var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-bottom: 10px; transition: 0.2s; }
+        #drop-zone:hover { border-color: var(--accent); background: #1c2128; }
+        
+        /* Base64 -> Image Styles */
+        #preview-container { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; min-height: 120px; display: flex; align-items: center; justify-content: center; background: #000; overflow: hidden; }
+        #preview-img { max-width: 100%; max-height: 300px; display: none; }
+
+        textarea { width: 100%; height: 120px; background: #0d1117; color: #8b949e; border: 1px solid var(--border); padding: 10px; border-radius: 4px; font-family: monospace; font-size: 11px; margin-bottom: 10px; resize: none; }
+        .btn { padding: 8px 16px; background: var(--success); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; align-self: flex-start; }
+        .btn:hover { background: #2ea043; }
+    </style>
+</head>
+<body>
+
+    <h1 style="margin-bottom: 30px;">Base64 Visual Utility</h1>
+
+    <div class="container">
+        <div class="card">
+            <h2>Image to Base64</h2>
+            <div id="drop-zone">Click or Drop Image Here</div>
+            <input type="file" id="file-input" style="display:none" accept="image/*">
+            <textarea id="b64-output" placeholder="String will appear here..."></textarea>
+            <button class="btn" onclick="copyText()">Copy String</button>
+        </div>
+
+        <div class="card">
+            <h2>Base64 to Image</h2>
+            <textarea id="b64-input" placeholder="Paste your base64 string here (including data:image/...)"></textarea>
+            <button class="btn" style="background: var(--accent);" onclick="renderImage()">Render Image</button>
+            <div id="preview-container">
+                <span id="placeholder-text" style="color: #444;">Image Preview</span>
+                <img id="preview-img" src="" alt="Decoded Preview">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Image to Base64 Logic ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const b64Output = document.getElementById('b64-output');
+
+        dropZone.onclick = () => fileInput.click();
+        fileInput.onchange = (e) => handleFiles(e.target.files);
+        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.style.borderColor = "#58a6ff"; };
+        dropZone.ondrop = (e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); };
+
+        function handleFiles(files) {
+            const file = files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+            const reader = new FileReader();
+            reader.onload = (e) => { b64Output.value = e.target.result; };
+            reader.readAsDataURL(file);
+        }
+
+        function copyText() {
+            b64Output.select();
+            document.execCommand('copy');
+        }
+
+        // --- Base64 to Image Logic ---
+        function renderImage() {
+            const input = document.getElementById('b64-input').value.trim();
+            const img = document.getElementById('preview-img');
+            const placeholder = document.getElementById('placeholder-text');
+
+            if (input.startsWith('data:image/')) {
+                img.src = input;
+                img.style.display = 'block';
+                placeholder.style.display = 'none';
+            } else {
+                alert("Please paste a valid Data URI (starting with data:image/...)");
+            }
+        }
+    </script>
+</body>
+</html>
