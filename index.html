@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:;" />
+  <title>LTM Brainstorm — JARVIS</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <div class="chat-container">
+      <div class="output" id="output">
+        <div class="bubble system">
+          <div class="bubble-content">Ready. Type a thought to ingest, or ask a question for RAG-assisted brainstorming.</div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <textarea
+          id="input"
+          rows="1"
+          placeholder="Enter thought or question..."
+          autofocus
+        ></textarea>
+        <div class="input-actions">
+          <button id="btn-chat" class="btn btn-primary" title="RAG chat (requires model)">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <span id="status">Idle</span>
+      <span id="model-status">Model: not loaded</span>
+      <span id="version">v1.0.0</span>
+      <button id="btn-wipe-ltm" class="btn-wipe-ltm" title="Clear all Long-Term Memory">Wipe LTM</button>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
