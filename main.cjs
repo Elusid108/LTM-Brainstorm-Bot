@@ -26,7 +26,9 @@ async function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    mainWindow.webContents.openDevTools();
+    if (process.env.LTM_DEVTOOLS === '1') {
+      mainWindow.webContents.openDevTools();
+    }
   });
   mainWindow.on('closed', () => {
     if (vramIntervalId) clearInterval(vramIntervalId);

@@ -107,29 +107,40 @@ async function streamRagResponse(sessionId, promptPayload, onChunk) {
 
   let finalInput = fullPrompt;
   if (userImage) {
-    const base64Data = userImage.split(',')[1];
+    console.log('[LLM] Processing image payload...');
+    const base64Data = userImage.replace(/^data:image\/\w+;base64,/, "");
     finalInput = [
-      fullPrompt,
-      { type: 'image', data: base64Data }
+      { type: "text", text: fullPrompt },
+      { type: "image", data: base64Data }
     ];
   }
 
   console.log('--- CURRENT SHORT TERM MEMORY ---');
   console.dir(session.getChatHistory(), { depth: null });
 
-  const promptPromise = session.prompt(finalInput, {
-    onTextChunk(chunk) {
-      onChunk(chunk);
-    },
-  });
-  const assistantResponse = userImage
-    ? await Promise.race([
-        promptPromise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('VRAM Exhausted: Vision inference timed out after 30s. Try reducing image size or using a smaller model.')), 30000)
-        )
-      ])
-    : await promptPromise;
+  let assistantResponse;
+  try {
+    console.log('[LLM] Sending input to session.prompt...');
+    const promptPromise = session.prompt(finalInput, {
+      onTextChunk(chunk) {
+        onChunk(chunk);
+      },
+    });
+    assistantResponse = userImage
+      ? await Promise.race([
+          promptPromise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('VRAM Exhausted: Vision inference timed out after 30s. Try reducing image size or using a smaller model.')), 30000)
+          )
+        ])
+      : await promptPromise;
+    console.log('[LLM] session.prompt completed successfully.');
+  } catch (error) {
+    console.error('[LLM] CRITICAL ERROR during session.prompt:', error);
+    // Send an error chunk to the frontend so the UI doesn't hang forever
+    onChunk('\n\n*[System Error: The neural pathway collapsed. Check terminal for VRAM/Vision errors.]*');
+    return null;
+  }
 
   // Ingestion gatekeeping: avoid conversational filler
   if (userText.length >= 20) {

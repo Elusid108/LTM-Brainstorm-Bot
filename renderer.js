@@ -16,25 +16,22 @@ let currentBase64Image = null;
 let pendingBuffer = '';
 
 /**
- * Parses text into bubbles: splits by \n\n, then by *action* blocks (preserving asterisks).
+ * Parses a single paragraph into bubbles: splits by *action* blocks (preserving asterisks).
  * Action blocks get italic styling; dialogue gets character-name stripping.
  */
-function processTextIntoBubbles(finalText) {
-  const paragraphs = finalText.split('\n\n').filter(p => p.trim() !== '');
-  paragraphs.forEach(p => {
-    const parts = p.split(/(\*[^*]+\*)/g).filter(part => part.trim() !== '');
-    parts.forEach(part => {
-      let trimmedPart = part.trim();
-      if (!trimmedPart) return;
-      if (trimmedPart.startsWith('*') && trimmedPart.endsWith('*')) {
-        appendLine(trimmedPart, 'assistant', true);
-      } else {
-        trimmedPart = trimmedPart.replace(/^[a-z\s.-]+:\s*/i, '').replace(/^"|"$/g, '').trim();
-        if (trimmedPart) {
-          appendLine(trimmedPart, 'assistant', false);
-        }
+function processParagraph(text) {
+  const subParts = text.split(/(\*[^*]+\*)/g).filter(part => part.trim() !== '');
+  subParts.forEach(part => {
+    let trimmedPart = part.trim();
+    if (!trimmedPart) return;
+    if (trimmedPart.startsWith('*') && trimmedPart.endsWith('*')) {
+      appendLine(trimmedPart, 'assistant', true);
+    } else {
+      trimmedPart = trimmedPart.replace(/^[a-z\s.-]+:\s*/i, '').replace(/^"|"$/g, '').trim();
+      if (trimmedPart) {
+        appendLine(trimmedPart, 'assistant', false);
       }
-    });
+    }
   });
 }
 
@@ -45,18 +42,16 @@ window.ltm.onStreamChunk((chunk) => {
   if (pendingBuffer.includes('\n\n')) {
     const parts = pendingBuffer.split('\n\n');
     pendingBuffer = parts.pop();
-    for (const p of parts) {
-      processTextIntoBubbles(p);
-    }
+    parts.forEach((p) => processParagraph(p));
   }
   output.scrollTop = output.scrollHeight;
 });
 
-window.ltm.onStreamDone((finalText) => {
+window.ltm.onStreamDone(() => {
   console.log('[Renderer] Stream completed');
   if (typingIndicator) typingIndicator.style.display = 'none';
   if (pendingBuffer.trim()) {
-    processTextIntoBubbles(pendingBuffer.trim());
+    processParagraph(pendingBuffer.trim());
   }
   pendingBuffer = '';
   setStatus('Idle');
