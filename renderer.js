@@ -52,13 +52,45 @@ window.ltm.onStreamError((err) => {
   input.focus();
 });
 
-// Set models dropdown, version, and auto-init first model on load
+async function initRagSession() {
+  const modelSelect = document.getElementById('model-select');
+  const personaSelect = document.getElementById('persona-select');
+  const model = modelSelect?.value || modelPath;
+  if (!model) return { success: false, error: 'No model path' };
+  const personaPath = personaSelect?.value || '';
+  let personaText = '';
+  if (personaPath) {
+    try {
+      personaText = await window.ltm.readPersona(personaPath);
+    } catch (e) {
+      console.error('[Renderer] Failed to read persona:', e);
+      modelStatusEl.textContent = `Persona: ${e.message}`;
+      return { success: false, error: `Persona read failed: ${e.message}` };
+    }
+  }
+  modelStatusEl.textContent = 'Loading...';
+  try {
+    const init = await window.ltm.initRagChat(model, personaText);
+    if (init.success) {
+      modelStatusEl.textContent = 'Model: Loaded';
+    } else {
+      modelStatusEl.textContent = `Model: Error - ${init.error}`;
+    }
+    return init;
+  } catch (e) {
+    modelStatusEl.textContent = `Model: Error - ${e.message}`;
+    return { success: false, error: e.message };
+  }
+}
+
+// Set models dropdown, version, personas, and auto-init on load
 window.addEventListener('DOMContentLoaded', async () => {
   const version = await window.ltm.getAppVersion();
   document.getElementById('version').textContent = `v${version}`;
 
   const models = await window.ltm.getModels();
   const modelSelect = document.getElementById('model-select');
+  const personaSelect = document.getElementById('persona-select');
 
   models.forEach(m => {
     const opt = document.createElement('option');
@@ -67,20 +99,26 @@ window.addEventListener('DOMContentLoaded', async () => {
     modelSelect.appendChild(opt);
   });
 
+  const personas = await window.ltm.getPersonas();
+  personas.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.path;
+    opt.textContent = p.name;
+    personaSelect.appendChild(opt);
+  });
+  if (personas.length > 0) {
+    const analytical = personas.find(p => p.name === 'Analytical');
+    personaSelect.value = analytical ? analytical.path : personas[0].path;
+  }
+
   if (models.length > 0) {
     modelSelect.value = models[0].path;
     modelPath = models[0].path;
-    modelStatusEl.textContent = 'Loading...';
-    try {
-      const init = await window.ltm.initRagChat(models[0].path);
-      if (init.success) {
-        modelStatusEl.textContent = 'Model: Loaded';
-        console.log('[Renderer] Auto-loaded first model', { path: models[0].path });
-      } else {
-        modelStatusEl.textContent = `Model: Error - ${init.error}`;
-      }
-    } catch (e) {
-      modelStatusEl.textContent = `Model: Error - ${e.message}`;
+    const init = await initRagSession();
+    if (!init.success) {
+      console.log('[Renderer] Auto-init failed', init.error);
+    } else {
+      console.log('[Renderer] Auto-loaded first model + persona');
     }
   } else {
     modelPath = await window.ltm.getDefaultModelPath();
@@ -96,22 +134,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   modelSelect.addEventListener('change', async (e) => {
     const newPath = e.target.value;
     const prevPath = modelPath;
-    console.log('Frontend: Requesting model swap to ->', newPath);
-    modelStatusEl.textContent = 'Loading...';
-    try {
-      const init = await window.ltm.initRagChat(newPath);
-      if (init.success) {
-        modelPath = newPath;
-        modelStatusEl.textContent = 'Model: Loaded';
-      } else {
-        modelStatusEl.textContent = `Model: Error - ${init.error}`;
-        e.target.value = prevPath || models[0]?.path || '';
-      }
-    } catch (err) {
-      console.error('Frontend IPC Error:', err);
-      modelStatusEl.textContent = 'Model Load Failed';
+    console.log('[Renderer] Model changed to:', newPath);
+    const init = await initRagSession();
+    if (!init.success) {
       e.target.value = prevPath || models[0]?.path || '';
+    } else {
+      modelPath = newPath;
     }
+  });
+
+  personaSelect.addEventListener('change', async () => {
+    console.log('[Renderer] Persona changed');
+    await initRagSession();
   });
 });
 
@@ -175,7 +209,7 @@ async function onChat() {
   }
 
   try {
-    const init = await window.ltm.initRagChat(modelPath);
+    const init = await initRagSession();
     if (!init.success) {
       console.error('[Renderer] Model load IPC error:', init.error);
       showErrorInBubble(`Error: ${init.error}`);

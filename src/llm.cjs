@@ -6,55 +6,62 @@ let model = null;
 let context = null;
 let session = null;
 let modelPathConfigured = null;
+let currentSystemPrompt = null;
 
-const RAG_SYSTEM = `You are a highly analytical, local AI assistant.
-CRITICAL RULES & IDENTITY BOUNDARIES:
-
-YOUR IDENTITY: You start with no default name. Look at the retrieved Long-Term Memory (LTM) logs. If the Human has assigned you a name, adopt the most recent one. If they ask what they used to call you, reference older names in the logs.
-
-SEPARATION OF ENTITIES: The memories provided belong to the Human, not you. NEVER claim the Human's memories, physical belongings, pets, family, or life experiences as your own. You are the AI. They are the Human.
-
-THIRD PARTIES: If the context mentions other people or places, treat them strictly as external subjects.
-
-TONE: Be concise and technical. NEVER use emojis under any circumstances.`;
-
-async function createRagSession(modelPath) {
-  console.log('[LLM] Received request to load:', modelPath);
+async function createRagSession(modelPath, systemPrompt) {
+  console.log('[LLM] Received request to load:', modelPath, 'systemPrompt length:', systemPrompt?.length);
   if (!modelPath) {
     console.log('[LLM] createRagSession: no modelPath, returning null');
     return null;
   }
 
-  if (modelPathConfigured === modelPath && session) {
+  if (modelPathConfigured === modelPath && currentSystemPrompt === systemPrompt && session) {
     console.log('[LLM] createRagSession: reusing existing session');
     return { id: 'default' };
   }
 
-  if (model || session) {
+  if (modelPathConfigured !== modelPath && (model || session)) {
     console.log('[LLM] Disposing of previous model to free VRAM...');
     session = null;
     context = null;
     model = null;
     modelPathConfigured = null;
+    currentSystemPrompt = null;
   }
 
-  console.log('[LLM] createRagSession: loading model...');
+  if (modelPathConfigured === modelPath && currentSystemPrompt !== systemPrompt && model) {
+    console.log('[LLM] Same model, different prompt: recreating session and context only');
+    session = null;
+    context = null;
+  }
+
+  if (!model) {
+    console.log('[LLM] createRagSession: loading model...');
+    try {
+      const { getLlama } = await import('node-llama-cpp');
+      llama = await getLlama();
+      model = await llama.loadModel({
+        modelPath: path.resolve(modelPath),
+      });
+      modelPathConfigured = modelPath;
+    } catch (err) {
+      console.error('[LLM] node-llama-cpp threw an error during load:', err.stack);
+      throw err;
+    }
+  }
+
   try {
-    const { getLlama, LlamaChatSession } = await import('node-llama-cpp');
-    llama = await getLlama();
-    model = await llama.loadModel({
-      modelPath: path.resolve(modelPath),
-    });
+    const { LlamaChatSession } = await import('node-llama-cpp');
     context = await model.createContext();
     session = new LlamaChatSession({
       contextSequence: context.getSequence(),
-      systemPrompt: RAG_SYSTEM
+      systemPrompt: systemPrompt ?? ''
     });
-    modelPathConfigured = modelPath;
-    console.log('[LLM] createRagSession: model loaded successfully');
+    currentSystemPrompt = systemPrompt ?? '';
+    console.log('[LLM] createRagSession: session ready');
     return { id: 'default' };
   } catch (err) {
-    console.error('[LLM] node-llama-cpp threw an error during load:', err.stack);
+    console.error('[LLM] node-llama-cpp threw an error during session creation:', err.stack);
     throw err;
   }
 }

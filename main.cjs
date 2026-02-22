@@ -29,8 +29,26 @@ async function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
+const DEFAULT_ANALYTICAL_CONTENT = `You are a highly analytical, local AI assistant.
+CRITICAL RULES & IDENTITY BOUNDARIES:
+
+YOUR IDENTITY: You start with no default name. Look at the retrieved Long-Term Memory (LTM) logs. If the Human has assigned you a name, adopt the most recent one. If they ask what they used to call you, reference older names in the logs.
+
+SEPARATION OF ENTITIES: The memories provided belong to the Human, not you. NEVER claim the Human's memories, physical belongings, pets, family, or life experiences as your own. You are the AI. They are the Human.
+
+THIRD PARTIES: If the context mentions other people or places, treat them strictly as external subjects.
+
+TONE: Be concise and technical. NEVER use emojis under any circumstances.`;
+
 app.whenReady().then(async () => {
   console.log('[Main] App ready');
+  const personasDir = path.join(__dirname, 'personas');
+  if (!fs.existsSync(personasDir)) fs.mkdirSync(personasDir, { recursive: true });
+  const analyticalPath = path.join(personasDir, 'Analytical.txt');
+  if (!fs.existsSync(analyticalPath)) {
+    fs.writeFileSync(analyticalPath, DEFAULT_ANALYTICAL_CONTENT.trim(), 'utf-8');
+    console.log('[Main] Created default persona: Analytical.txt');
+  }
   const dbPath = path.join(app.getPath('userData'), 'ltm-brainstorm.db');
   console.log('[Main] Initializing database', { dbPath });
   await initDatabase(dbPath);
@@ -55,6 +73,25 @@ ipcMain.handle('brainstorm:get-app-version', () => {
 // IPC: Get default model path (project models dir)
 ipcMain.handle('brainstorm:get-default-model-path', () => {
   return path.join(__dirname, 'models', 'gemma-2-2b-it-Q4_K_M.gguf');
+});
+
+// IPC: Get list of .txt persona files from local personas directory
+ipcMain.handle('brainstorm:get-personas', () => {
+  const personasDir = path.join(__dirname, 'personas');
+  try {
+    const files = fs.readdirSync(personasDir, { withFileTypes: true });
+    return files
+      .filter(f => !f.isDirectory() && f.name.endsWith('.txt'))
+      .map(f => ({ name: f.name.replace('.txt', ''), path: path.join(personasDir, f.name) }));
+  } catch (err) {
+    console.error('[Main] brainstorm:get-personas:', err);
+    return [];
+  }
+});
+
+// IPC: Read persona file contents
+ipcMain.handle('brainstorm:read-persona', (_, filePath) => {
+  return fs.readFileSync(filePath, 'utf-8');
 });
 
 // IPC: Get list of .gguf models from local models directory
@@ -110,12 +147,12 @@ ipcMain.handle('brainstorm:retrieve', async (_, { query, limit }) => {
   }
 });
 
-// IPC: Initialize RAG chat (load model)
-ipcMain.handle('brainstorm:rag-chat', async (_, { modelPath }) => {
-  console.log('[Main] brainstorm:rag-chat received', { modelPath });
+// IPC: Initialize RAG chat (load model + system prompt from persona)
+ipcMain.handle('brainstorm:rag-chat', async (_, { modelPath, systemPrompt }) => {
+  console.log('[Main] brainstorm:rag-chat received', { modelPath, systemPromptLength: systemPrompt?.length });
   try {
     console.log('[Main] Attempting to load model path:', modelPath);
-    const session = await createRagSession(modelPath);
+    const session = await createRagSession(modelPath, systemPrompt ?? '');
     if (!session) {
       console.log('[Main] brainstorm:rag-chat: session is null');
       return { success: false, error: 'LLM not initialized. Provide model path.' };

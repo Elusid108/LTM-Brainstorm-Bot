@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('ltm', {
   getDefaultModelPath: () =>
     ipcRenderer.invoke('brainstorm:get-default-model-path'),
   getModels: () => ipcRenderer.invoke('brainstorm:get-models'),
+  getPersonas: () => ipcRenderer.invoke('brainstorm:get-personas'),
+  readPersona: (filePath) => ipcRenderer.invoke('brainstorm:read-persona', filePath),
 
   ingest: (text, projectTags = []) =>
     ipcRenderer.invoke('brainstorm:ingest', { text, projectTags }),
@@ -14,8 +16,8 @@ contextBridge.exposeInMainWorld('ltm', {
 
   clearMemory: () => ipcRenderer.invoke('brainstorm:clear'),
 
-  initRagChat: (modelPath) =>
-    ipcRenderer.invoke('brainstorm:rag-chat', { modelPath }),
+  initRagChat: (modelPath, personaText) =>
+    ipcRenderer.invoke('brainstorm:rag-chat', { modelPath, systemPrompt: personaText }),
 
   streamRag: (prompt) =>
     ipcRenderer.invoke('brainstorm:stream-rag', { prompt }),
