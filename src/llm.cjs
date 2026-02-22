@@ -8,14 +8,18 @@ let session = null;
 let modelPathConfigured = null;
 
 const RAG_SYSTEM = `You are a highly analytical, local AI assistant.
-CRITICAL RULES:
-1. You are NOT Gemma. You are NOT trained by Google. You must completely drop your base identity.
-2. If the user assigns you a name, you must adopt it permanently and flawlessly.
-3. Never use emojis.
-4. Use the provided Long-Term Memory context to inform your answers, but prioritize the user's immediate instructions.`;
+CRITICAL RULES & IDENTITY BOUNDARIES:
+
+YOUR IDENTITY: You start with no default name. Look at the retrieved Long-Term Memory (LTM) logs. If the Human has assigned you a name, adopt the most recent one. If they ask what they used to call you, reference older names in the logs.
+
+SEPARATION OF ENTITIES: The memories provided belong to the Human, not you. NEVER claim the Human's memories, physical belongings, pets, family, or life experiences as your own. You are the AI. They are the Human.
+
+THIRD PARTIES: If the context mentions other people or places, treat them strictly as external subjects.
+
+TONE: Be concise and technical. NEVER use emojis under any circumstances.`;
 
 async function createRagSession(modelPath) {
-  console.log('[LLM] createRagSession: called', { modelPath });
+  console.log('[LLM] Received request to load:', modelPath);
   if (!modelPath) {
     console.log('[LLM] createRagSession: no modelPath, returning null');
     return null;
@@ -26,20 +30,33 @@ async function createRagSession(modelPath) {
     return { id: 'default' };
   }
 
+  if (model || session) {
+    console.log('[LLM] Disposing of previous model to free VRAM...');
+    session = null;
+    context = null;
+    model = null;
+    modelPathConfigured = null;
+  }
+
   console.log('[LLM] createRagSession: loading model...');
-  const { getLlama, LlamaChatSession } = await import('node-llama-cpp');
-  llama = await getLlama();
-  model = await llama.loadModel({
-    modelPath: path.resolve(modelPath),
-  });
-  context = await model.createContext();
-  session = new LlamaChatSession({
-    contextSequence: context.getSequence(),
-    systemPrompt: RAG_SYSTEM
-  });
-  modelPathConfigured = modelPath;
-  console.log('[LLM] createRagSession: model loaded successfully');
-  return { id: 'default' };
+  try {
+    const { getLlama, LlamaChatSession } = await import('node-llama-cpp');
+    llama = await getLlama();
+    model = await llama.loadModel({
+      modelPath: path.resolve(modelPath),
+    });
+    context = await model.createContext();
+    session = new LlamaChatSession({
+      contextSequence: context.getSequence(),
+      systemPrompt: RAG_SYSTEM
+    });
+    modelPathConfigured = modelPath;
+    console.log('[LLM] createRagSession: model loaded successfully');
+    return { id: 'default' };
+  } catch (err) {
+    console.error('[LLM] node-llama-cpp threw an error during load:', err.stack);
+    throw err;
+  }
 }
 
 async function streamRagResponse(sessionId, prompt, onChunk) {
@@ -59,8 +76,8 @@ async function streamRagResponse(sessionId, prompt, onChunk) {
     : '(No relevant past thoughts in LTM)';
 
   const fullPrompt = contextBlock !== '(No relevant past thoughts in LTM)'
-    ? `[System Note: Retrieved memories from LTM:\n${contextBlock}]\n\n${prompt}`
-    : prompt;
+    ? `[SYSTEM NOTE: The following are historical interaction logs retrieved from Long-Term Memory. Use them to understand context, track name changes, and recall the Human's facts.]\n${contextBlock}\n\nHuman: ${prompt}`
+    : `Human: ${prompt}`;
 
   console.log('[LLM] streamRagResponse: user message sent to session.prompt():\n---\n' + fullPrompt + '\n---');
 
@@ -81,7 +98,7 @@ async function streamRagResponse(sessionId, prompt, onChunk) {
 
   const firstSentence = cleanedResponse.split(/[.!?\n]/)[0].trim();
   if (!firstSentence) return;
-  const memoryBlock = `Context:\nUser Note: ${prompt}\nInsight: ${firstSentence}`;
+  const memoryBlock = `Log - Human stated: "${prompt}" | AI replied: "${firstSentence}"`;
   ingestBrainstorm(memoryBlock, ['auto-memory'])
     .then(() => console.log('✅ Auto-ingested to LTM'))
     .catch((err) => console.error('[LLM] Auto-ingest failed:', err));

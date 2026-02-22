@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const { initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory } = require('./src/database.cjs');
 const { createRagSession, streamRagResponse } = require('./src/llm.cjs');
@@ -56,6 +57,20 @@ ipcMain.handle('brainstorm:get-default-model-path', () => {
   return path.join(__dirname, 'models', 'gemma-2-2b-it-Q4_K_M.gguf');
 });
 
+// IPC: Get list of .gguf models from local models directory
+ipcMain.handle('brainstorm:get-models', () => {
+  const modelsDir = path.join(__dirname, 'models');
+  try {
+    const files = fs.readdirSync(modelsDir, { withFileTypes: true });
+    return files
+      .filter(f => !f.isDirectory() && f.name.endsWith('.gguf'))
+      .map(f => ({ name: f.name, path: path.join(modelsDir, f.name) }));
+  } catch (err) {
+    console.error('[Main] brainstorm:get-models:', err);
+    return [];
+  }
+});
+
 // IPC: Ingest a brainstorm (save thought + embed + store)
 ipcMain.handle('brainstorm:ingest', async (_, { text, projectTags }) => {
   console.log('[Main] brainstorm:ingest received', { textLength: text?.length, projectTags });
@@ -99,6 +114,7 @@ ipcMain.handle('brainstorm:retrieve', async (_, { query, limit }) => {
 ipcMain.handle('brainstorm:rag-chat', async (_, { modelPath }) => {
   console.log('[Main] brainstorm:rag-chat received', { modelPath });
   try {
+    console.log('[Main] Attempting to load model path:', modelPath);
     const session = await createRagSession(modelPath);
     if (!session) {
       console.log('[Main] brainstorm:rag-chat: session is null');
@@ -107,8 +123,8 @@ ipcMain.handle('brainstorm:rag-chat', async (_, { modelPath }) => {
     console.log('[Main] brainstorm:rag-chat success');
     return { success: true };
   } catch (err) {
-    console.error('Error in brainstorm:rag-chat:', err);
-    return { success: false, error: err.message };
+    console.error('[Main] Model initialization crashed:', err);
+    throw err;
   }
 });
 

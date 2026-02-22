@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('ltm', {
   getAppVersion: () => ipcRenderer.invoke('brainstorm:get-app-version'),
   getDefaultModelPath: () =>
     ipcRenderer.invoke('brainstorm:get-default-model-path'),
+  getModels: () => ipcRenderer.invoke('brainstorm:get-models'),
 
   ingest: (text, projectTags = []) =>
     ipcRenderer.invoke('brainstorm:ingest', { text, projectTags }),

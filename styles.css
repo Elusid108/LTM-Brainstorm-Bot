@@ -188,6 +188,30 @@ html, body {
   align-items: center;
 }
 
+.model-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-dropdown {
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 180px;
+}
+
+.model-dropdown:hover,
+.model-dropdown:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
 .btn-wipe-ltm {
   font-size: 10px;
   padding: 2px 8px;

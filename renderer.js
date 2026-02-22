@@ -52,18 +52,67 @@ window.ltm.onStreamError((err) => {
   input.focus();
 });
 
-// Set default model path and version on load
+// Set models dropdown, version, and auto-init first model on load
 window.addEventListener('DOMContentLoaded', async () => {
   const version = await window.ltm.getAppVersion();
   document.getElementById('version').textContent = `v${version}`;
-  console.log('[Renderer] DOMContentLoaded: fetching default model path');
-  modelPath = await window.ltm.getDefaultModelPath();
-  if (modelPath) {
-    document.getElementById('model-status').textContent = 'Model: gemma-2-2b-it (default)';
-    console.log('[Renderer] Default model path set', { modelPath });
+
+  const models = await window.ltm.getModels();
+  const modelSelect = document.getElementById('model-select');
+
+  models.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.path;
+    opt.textContent = m.name;
+    modelSelect.appendChild(opt);
+  });
+
+  if (models.length > 0) {
+    modelSelect.value = models[0].path;
+    modelPath = models[0].path;
+    modelStatusEl.textContent = 'Loading...';
+    try {
+      const init = await window.ltm.initRagChat(models[0].path);
+      if (init.success) {
+        modelStatusEl.textContent = 'Model: Loaded';
+        console.log('[Renderer] Auto-loaded first model', { path: models[0].path });
+      } else {
+        modelStatusEl.textContent = `Model: Error - ${init.error}`;
+      }
+    } catch (e) {
+      modelStatusEl.textContent = `Model: Error - ${e.message}`;
+    }
   } else {
-    console.log('[Renderer] No default model path');
+    modelPath = await window.ltm.getDefaultModelPath();
+    if (modelPath) {
+      modelStatusEl.textContent = 'Model: not loaded (no .gguf in /models)';
+      console.log('[Renderer] No models in /models, using default path fallback', { modelPath });
+    } else {
+      modelStatusEl.textContent = 'Model: not loaded';
+    }
+    modelSelect.disabled = true;
   }
+
+  modelSelect.addEventListener('change', async (e) => {
+    const newPath = e.target.value;
+    const prevPath = modelPath;
+    console.log('Frontend: Requesting model swap to ->', newPath);
+    modelStatusEl.textContent = 'Loading...';
+    try {
+      const init = await window.ltm.initRagChat(newPath);
+      if (init.success) {
+        modelPath = newPath;
+        modelStatusEl.textContent = 'Model: Loaded';
+      } else {
+        modelStatusEl.textContent = `Model: Error - ${init.error}`;
+        e.target.value = prevPath || models[0]?.path || '';
+      }
+    } catch (err) {
+      console.error('Frontend IPC Error:', err);
+      modelStatusEl.textContent = 'Model Load Failed';
+      e.target.value = prevPath || models[0]?.path || '';
+    }
+  });
 });
 
 /**
