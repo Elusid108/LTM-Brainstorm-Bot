@@ -35,4 +35,8 @@ contextBridge.exposeInMainWorld('ltm', {
   onStreamError: (callback) => {
     ipcRenderer.on('brainstorm:stream-error', (_, { error }) => callback(error));
   },
+
+  onVramUpdate: (callback) => {
+    ipcRenderer.on('status:vram', (_, stats) => callback(stats));
+  },
 });

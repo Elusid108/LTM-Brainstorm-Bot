@@ -3,6 +3,7 @@ const input = document.getElementById('input');
 const btnChat = document.getElementById('btn-chat');
 const statusEl = document.getElementById('status');
 const modelStatusEl = document.getElementById('model-status');
+const vramMonitorEl = document.getElementById('vram-monitor');
 const typingIndicator = document.getElementById('typing-indicator');
 const imagePreviewContainer = document.getElementById('image-preview-container');
 const previewImg = document.getElementById('preview-img');
@@ -14,6 +15,29 @@ let modelPath = null;
 let currentBase64Image = null;
 let pendingBuffer = '';
 
+/**
+ * Parses text into bubbles: splits by \n\n, then by *action* blocks (preserving asterisks).
+ * Action blocks get italic styling; dialogue gets character-name stripping.
+ */
+function processTextIntoBubbles(finalText) {
+  const paragraphs = finalText.split('\n\n').filter(p => p.trim() !== '');
+  paragraphs.forEach(p => {
+    const parts = p.split(/(\*[^*]+\*)/g).filter(part => part.trim() !== '');
+    parts.forEach(part => {
+      let trimmedPart = part.trim();
+      if (!trimmedPart) return;
+      if (trimmedPart.startsWith('*') && trimmedPart.endsWith('*')) {
+        appendLine(trimmedPart, 'assistant', true);
+      } else {
+        trimmedPart = trimmedPart.replace(/^[a-z\s.-]+:\s*/i, '').replace(/^"|"$/g, '').trim();
+        if (trimmedPart) {
+          appendLine(trimmedPart, 'assistant', false);
+        }
+      }
+    });
+  });
+}
+
 // Block-style stream parsing: accumulate chunks, emit on \n\n
 window.ltm.onStreamChunk((chunk) => {
   if (typingIndicator) typingIndicator.style.display = '';
@@ -21,9 +45,9 @@ window.ltm.onStreamChunk((chunk) => {
   if (pendingBuffer.includes('\n\n')) {
     const parts = pendingBuffer.split('\n\n');
     pendingBuffer = parts.pop();
-    parts.forEach((p) => {
-      if (p.trim()) appendLine(p.trim(), 'assistant');
-    });
+    for (const p of parts) {
+      processTextIntoBubbles(p);
+    }
   }
   output.scrollTop = output.scrollHeight;
 });
@@ -32,9 +56,7 @@ window.ltm.onStreamDone((finalText) => {
   console.log('[Renderer] Stream completed');
   if (typingIndicator) typingIndicator.style.display = 'none';
   if (pendingBuffer.trim()) {
-    const text = pendingBuffer.trim();
-    const cleanText = text.replace(/^(Assistant|AI|Insight|V|VICTOR|V\.I\.C\.T\.O\.R\s?):/i, '').trim();
-    appendLine(cleanText, 'assistant');
+    processTextIntoBubbles(pendingBuffer.trim());
   }
   pendingBuffer = '';
   setStatus('Idle');
@@ -117,11 +139,13 @@ function appendSystemMessage(text) {
  * Appends a chat bubble to the output.
  * @param {string} content - The message text
  * @param {'user'|'assistant'|'system'|'ingest'} sender - Sender type
+ * @param {boolean} isAction - If true, style as action block (italic, blue tint)
  * @returns {HTMLElement} The bubble element
  */
-function appendLine(content, sender = 'system') {
+function appendLine(content, sender = 'system', isAction = false) {
   const bubble = document.createElement('div');
   bubble.className = `bubble ${sender}`;
+  if (isAction) bubble.classList.add('action-block');
   const contentEl = document.createElement('div');
   contentEl.className = 'bubble-content';
   contentEl.textContent = content;
@@ -157,6 +181,16 @@ function setStatus(msg) {
 window.addEventListener('DOMContentLoaded', async () => {
   const version = await window.ltm.getAppVersion();
   document.getElementById('version').textContent = `v${version}`;
+
+  window.ltm.onVramUpdate((stats) => {
+    if (vramMonitorEl) {
+      if (stats?.usedMB != null && stats?.totalMB != null) {
+        vramMonitorEl.textContent = `${stats.usedMB} / ${stats.totalMB} MB`;
+      } else {
+        vramMonitorEl.textContent = '— MB';
+      }
+    }
+  });
 
   const models = await window.ltm.getModels();
   const modelSelect = document.getElementById('model-select');

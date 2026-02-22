@@ -1,10 +1,12 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 const { initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory } = require('./src/database.cjs');
 const { createRagSession, streamRagResponse } = require('./src/llm.cjs');
 
 let mainWindow = null;
+let vramIntervalId = null;
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -26,10 +28,42 @@ async function createWindow() {
     mainWindow.show();
     mainWindow.webContents.openDevTools();
   });
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => {
+    if (vramIntervalId) clearInterval(vramIntervalId);
+    vramIntervalId = null;
+    mainWindow = null;
+  });
+
+  async function fetchVramStats() {
+    try {
+      const out = await new Promise((resolve, reject) => {
+        exec('nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits', { timeout: 3000 }, (err, stdout) => (err ? reject(err) : resolve(stdout)));
+      });
+      const nums = out.trim().split(/[,\s]+/).map((n) => parseInt(n, 10)).filter((n) => !isNaN(n));
+      if (nums.length >= 2 && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('status:vram', { usedMB: nums[0], totalMB: nums[1] });
+      }
+    } catch {
+      try {
+        const si = require('systeminformation');
+        const gfx = await si.graphics();
+        const ctrl = gfx.controllers?.[0];
+        if (ctrl?.vram && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('status:vram', { usedMB: ctrl.memoryUsed ?? 0, totalMB: ctrl.vram });
+        }
+      } catch {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('status:vram', { usedMB: null, totalMB: null });
+        }
+      }
+    }
+  }
+  vramIntervalId = setInterval(fetchVramStats, 2000);
+  fetchVramStats();
 }
 
-const DEFAULT_ANALYTICAL_CONTENT = `You are a local AI assistant with no default name. Adopt the identity provided in the conversation logs. Use the current persona name if one exists.`;
+const DEFAULT_ANALYTICAL_CONTENT = `You are a local AI assistant with no default name. Adopt the identity provided in the conversation logs. Use the current persona name if one exists.
+CRITICAL: Never prefix your response with your name, "Assistant:", or "Insight:". Start your response directly with dialogue or actions.`;
 
 app.whenReady().then(async () => {
   console.log('[Main] App ready');

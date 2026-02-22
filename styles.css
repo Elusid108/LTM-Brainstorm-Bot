@@ -132,6 +132,11 @@ html, body {
   color: var(--text-dim);
 }
 
+.bubble.action-block .bubble-content {
+  font-style: italic;
+  color: #a5d6ff;
+}
+
 /* Input area - anchored to bottom */
 .input-area {
   padding: 16px 24px 20px;
@@ -249,6 +254,7 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .model-controls {

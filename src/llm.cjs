@@ -52,10 +52,11 @@ async function createRagSession(modelPath, systemPrompt) {
       }
       const { getLlama } = await import('node-llama-cpp');
       llama = await getLlama();
+      const isVision = !!visionModelPath;
       model = await llama.loadModel({
         modelPath: path.resolve(modelPath),
         visionModelPath: visionModelPath ? path.resolve(visionModelPath) : undefined,
-        gpuLayers: 32
+        gpuLayers: isVision ? 20 : 32
       });
       modelPathConfigured = modelPath;
     } catch (err) {
@@ -116,11 +117,19 @@ async function streamRagResponse(sessionId, promptPayload, onChunk) {
   console.log('--- CURRENT SHORT TERM MEMORY ---');
   console.dir(session.getChatHistory(), { depth: null });
 
-  const assistantResponse = await session.prompt(finalInput, {
+  const promptPromise = session.prompt(finalInput, {
     onTextChunk(chunk) {
       onChunk(chunk);
     },
   });
+  const assistantResponse = userImage
+    ? await Promise.race([
+        promptPromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('VRAM Exhausted: Vision inference timed out after 30s. Try reducing image size or using a smaller model.')), 30000)
+        )
+      ])
+    : await promptPromise;
 
   // Ingestion gatekeeping: avoid conversational filler
   if (userText.length >= 20) {
