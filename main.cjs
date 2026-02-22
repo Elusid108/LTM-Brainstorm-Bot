@@ -91,7 +91,7 @@ ipcMain.handle('brainstorm:get-models', () => {
   try {
     const files = fs.readdirSync(modelsDir, { withFileTypes: true });
     return files
-      .filter(f => !f.isDirectory() && f.name.endsWith('.gguf') && !f.name.includes('mmproj'))
+      .filter(f => !f.isDirectory() && f.name.toLowerCase().endsWith('.gguf') && !f.name.toLowerCase().includes('mmproj'))
       .map(f => ({ name: f.name, path: path.join(modelsDir, f.name) }));
   } catch (err) {
     console.error('[Main] brainstorm:get-models:', err);

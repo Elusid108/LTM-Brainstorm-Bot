@@ -34,6 +34,7 @@ async function createRagSession(modelPath, systemPrompt) {
     console.log('[LLM] Same model, different prompt: recreating session and context only');
     session = null;
     context = null;
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   if (!model) {
@@ -53,7 +54,8 @@ async function createRagSession(modelPath, systemPrompt) {
       llama = await getLlama();
       model = await llama.loadModel({
         modelPath: path.resolve(modelPath),
-        visionModelPath: visionModelPath ? path.resolve(visionModelPath) : undefined
+        visionModelPath: visionModelPath ? path.resolve(visionModelPath) : undefined,
+        gpuLayers: 32
       });
       modelPathConfigured = modelPath;
     } catch (err) {
@@ -64,7 +66,7 @@ async function createRagSession(modelPath, systemPrompt) {
 
   try {
     const { LlamaChatSession } = await import('node-llama-cpp');
-    context = await model.createContext();
+    context = await model.createContext({ contextSize: 4096 });
     session = new LlamaChatSession({
       contextSequence: context.getSequence(),
       systemPrompt: systemPrompt ?? ''
