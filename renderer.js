@@ -3,33 +3,40 @@ const input = document.getElementById('input');
 const btnChat = document.getElementById('btn-chat');
 const statusEl = document.getElementById('status');
 const modelStatusEl = document.getElementById('model-status');
+const typingIndicator = document.getElementById('typing-indicator');
+const imagePreviewContainer = document.getElementById('image-preview-container');
+const previewImg = document.getElementById('preview-img');
+const removeImgBtn = document.getElementById('remove-img-btn');
+const imageInput = document.getElementById('image-input');
+const uploadImgBtn = document.getElementById('upload-img-btn');
 
 let modelPath = null;
-let activeAssistantBubble = null;
-let hasStrippedJarvisPrefix = false;
+let currentBase64Image = null;
+let pendingBuffer = '';
 
-// Stream handlers - no onStreamChunk; we use onStreamDone with finalText only
+// Block-style stream parsing: accumulate chunks, emit on \n\n
+window.ltm.onStreamChunk((chunk) => {
+  if (typingIndicator) typingIndicator.style.display = '';
+  pendingBuffer += chunk;
+  if (pendingBuffer.includes('\n\n')) {
+    const parts = pendingBuffer.split('\n\n');
+    pendingBuffer = parts.pop();
+    parts.forEach((p) => {
+      if (p.trim()) appendLine(p.trim(), 'assistant');
+    });
+  }
+  output.scrollTop = output.scrollHeight;
+});
+
 window.ltm.onStreamDone((finalText) => {
   console.log('[Renderer] Stream completed');
-  // Remove the typing indicator bubble
-  if (activeAssistantBubble) {
-    activeAssistantBubble.remove();
-    activeAssistantBubble = null;
+  if (typingIndicator) typingIndicator.style.display = 'none';
+  if (pendingBuffer.trim()) {
+    const text = pendingBuffer.trim();
+    const cleanText = text.replace(/^(Assistant|AI|Insight|V|VICTOR|V\.I\.C\.T\.O\.R\s?):/i, '').trim();
+    appendLine(cleanText, 'assistant');
   }
-
-  let text = (finalText ?? '').trim();
-  if (/^JARVIS Insight:\s*/i.test(text)) {
-    text = text.replace(/^JARVIS Insight:\s*/i, '');
-  }
-
-  const paragraphs = text ? text.split('\n\n').filter((p) => p.trim() !== '') : [];
-  const toAppend = paragraphs.length > 0 ? paragraphs : [text || ''];
-
-  for (const p of toAppend) {
-    appendLine(p, 'assistant');
-  }
-
-  hasStrippedJarvisPrefix = false;
+  pendingBuffer = '';
   setStatus('Idle');
   btnChat.disabled = false;
   input.focus();
@@ -38,13 +45,9 @@ window.ltm.onStreamDone((finalText) => {
 
 window.ltm.onStreamError((err) => {
   console.error('[Renderer] Stream IPC error:', err);
-  if (activeAssistantBubble) {
-    activeAssistantBubble.classList.remove('streaming');
-    const contentEl = activeAssistantBubble.querySelector('.bubble-content');
-    if (contentEl) contentEl.textContent = `Error: ${err}`;
-  }
-  activeAssistantBubble = null;
-  hasStrippedJarvisPrefix = false;
+  if (typingIndicator) typingIndicator.style.display = 'none';
+  pendingBuffer = '';
+  appendLine(`Error: ${err}`, 'assistant');
   setStatus('Idle');
   btnChat.disabled = false;
   input.focus();
@@ -102,7 +105,11 @@ function appendSystemMessage(text) {
   const el = document.createElement('div');
   el.className = 'system-msg';
   el.textContent = text;
-  output.appendChild(el);
+  if (typingIndicator && typingIndicator.parentNode === output) {
+    output.insertBefore(el, typingIndicator);
+  } else {
+    output.appendChild(el);
+  }
   output.scrollTop = output.scrollHeight;
 }
 
@@ -133,7 +140,11 @@ function appendLine(content, sender = 'system') {
     bubble.appendChild(copyBtn);
   }
 
-  output.appendChild(bubble);
+  if (typingIndicator && typingIndicator.parentNode === output) {
+    output.insertBefore(bubble, typingIndicator);
+  } else {
+    output.appendChild(bubble);
+  }
   output.scrollTop = output.scrollHeight;
   return bubble;
 }
@@ -226,43 +237,85 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Image upload button: open file picker
-  const uploadImgBtn = document.getElementById('upload-img-btn');
-  const imageInput = document.getElementById('image-input');
   if (uploadImgBtn && imageInput) {
     uploadImgBtn.addEventListener('click', () => imageInput.click());
+  }
+
+  // Image input: process file, resize to max 1024px, export as JPEG
+  if (imageInput) {
+    imageInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (uploadImgBtn) uploadImgBtn.textContent = 'Processing...';
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = dataUrl;
+        });
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        const maxDim = 1024;
+        if (width > maxDim || height > maxDim) {
+          const scale = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        currentBase64Image = canvas.toDataURL('image/jpeg', 0.8);
+        if (previewImg) previewImg.src = currentBase64Image;
+        if (imagePreviewContainer) imagePreviewContainer.style.display = 'block';
+      } catch (err) {
+        console.error('[Renderer] Image processing failed:', err);
+      } finally {
+        if (uploadImgBtn) uploadImgBtn.textContent = '📷 Add Image';
+        imageInput.value = '';
+      }
+    });
+  }
+
+  // Remove image button
+  if (removeImgBtn) {
+    removeImgBtn.addEventListener('click', () => {
+      currentBase64Image = null;
+      if (previewImg) previewImg.src = '';
+      if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
+    });
   }
 });
 
 async function onChat() {
-  const text = input.value.trim();
-  if (!text) return;
+  const prompt = input.value.trim();
+  if (!prompt) return;
 
-  appendLine(text, 'user');
+  appendLine(prompt, 'user');
   input.value = '';
-
-  const bubble = appendLine('', 'assistant');
-  bubble.classList.add('streaming');
-  const contentEl = bubble.querySelector('.bubble-content');
-  contentEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
-  activeAssistantBubble = bubble;
 
   setStatus('Initializing RAG…');
   btnChat.disabled = true;
 
-  function showErrorInBubble(msg) {
-    contentEl.innerHTML = '';
-    contentEl.textContent = msg;
-    bubble.classList.remove('streaming');
-    activeAssistantBubble = null;
+  function showError(msg) {
+    appendLine(`Error: ${msg}`, 'assistant');
+    if (typingIndicator) typingIndicator.style.display = 'none';
     setStatus('Idle');
     btnChat.disabled = false;
     input.focus();
   }
 
   if (!modelPath) {
-    modelPath = prompt('Enter path to your .gguf model file:', '') || await window.ltm.getDefaultModelPath();
+    modelPath = window.prompt('Enter path to your .gguf model file:', '') || await window.ltm.getDefaultModelPath();
     if (!modelPath) {
-      showErrorInBubble('Error: No model path configured');
+      showError('No model path configured');
       return;
     }
   }
@@ -271,16 +324,22 @@ async function onChat() {
     const init = await initRagSession();
     if (!init.success) {
       console.error('[Renderer] Model load IPC error:', init.error);
-      showErrorInBubble(`Error: ${init.error}`);
+      showError(init.error);
       return;
     }
     modelStatusEl.textContent = 'Model: loaded';
     console.log('[Renderer] Stream started');
     setStatus('Streaming…');
-    await window.ltm.streamRag(text);
+
+    const payload = { text: prompt, image: currentBase64Image };
+    await window.ltm.streamRagResponse(payload);
+
+    currentBase64Image = null;
+    if (previewImg) previewImg.src = '';
+    if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
   } catch (e) {
     console.error('[Renderer] Chat exception:', e);
-    showErrorInBubble(`Error: ${e.message}`);
+    showError(e.message);
   }
 }
 
@@ -291,7 +350,9 @@ document.getElementById('btn-wipe-ltm').addEventListener('click', async () => {
   try {
     const result = await window.ltm.clearMemory();
     if (result?.success) {
-      output.innerHTML = '';
+      Array.from(output.children).forEach((child) => {
+        if (child !== typingIndicator) child.remove();
+      });
       appendLine('$ Long-Term Memory completely wiped.', 'system');
     } else {
       appendLine(`Error: ${result?.error || 'Failed to wipe memory'}`, 'system');

@@ -29,16 +29,7 @@ async function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-const DEFAULT_ANALYTICAL_CONTENT = `You are a highly analytical, local AI assistant.
-CRITICAL RULES & IDENTITY BOUNDARIES:
-
-YOUR IDENTITY: You start with no default name. Look at the retrieved Long-Term Memory (LTM) logs. If the Human has assigned you a name, adopt the most recent one. If they ask what they used to call you, reference older names in the logs.
-
-SEPARATION OF ENTITIES: The memories provided belong to the Human, not you. NEVER claim the Human's memories, physical belongings, pets, family, or life experiences as your own. You are the AI. They are the Human.
-
-THIRD PARTIES: If the context mentions other people or places, treat them strictly as external subjects.
-
-TONE: Be concise and technical. NEVER use emojis under any circumstances.`;
+const DEFAULT_ANALYTICAL_CONTENT = `You are a local AI assistant with no default name. Adopt the identity provided in the conversation logs. Use the current persona name if one exists.`;
 
 app.whenReady().then(async () => {
   console.log('[Main] App ready');
@@ -100,7 +91,7 @@ ipcMain.handle('brainstorm:get-models', () => {
   try {
     const files = fs.readdirSync(modelsDir, { withFileTypes: true });
     return files
-      .filter(f => !f.isDirectory() && f.name.endsWith('.gguf'))
+      .filter(f => !f.isDirectory() && f.name.endsWith('.gguf') && !f.name.includes('mmproj'))
       .map(f => ({ name: f.name, path: path.join(modelsDir, f.name) }));
   } catch (err) {
     console.error('[Main] brainstorm:get-models:', err);
@@ -166,8 +157,8 @@ ipcMain.handle('brainstorm:rag-chat', async (_, { modelPath, systemPrompt }) => 
 });
 
 // IPC: Stream RAG response (retrieve + LLM stream)
-ipcMain.handle('brainstorm:stream-rag', async (event, { prompt }) => {
-  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length });
+ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image }) => {
+  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length, hasImage: !!image });
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) {
     console.error('[Main] brainstorm:stream-rag: no window');
@@ -175,7 +166,8 @@ ipcMain.handle('brainstorm:stream-rag', async (event, { prompt }) => {
   }
 
   try {
-    const finalText = await streamRagResponse('default', prompt, (chunk) => {
+    const promptPayload = { text: prompt, image: image ?? null };
+    const finalText = await streamRagResponse('default', promptPayload, (chunk) => {
       win.webContents.send('brainstorm:stream-chunk', { chunk });
     });
     win.webContents.send('brainstorm:stream-done', { finalText: finalText ?? '' });

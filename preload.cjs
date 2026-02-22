@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('ltm', {
 
   streamRag: (prompt) =>
     ipcRenderer.invoke('brainstorm:stream-rag', { prompt }),
+  streamRagResponse: (payload) =>
+    ipcRenderer.invoke('brainstorm:stream-rag', { prompt: payload?.text ?? '', image: payload?.image ?? null }),
 
   onStreamChunk: (callback) => {
     ipcRenderer.on('brainstorm:stream-chunk', (_, { chunk }) => callback(chunk));
