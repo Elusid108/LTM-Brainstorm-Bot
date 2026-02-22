@@ -6,36 +6,34 @@ const modelStatusEl = document.getElementById('model-status');
 
 let modelPath = null;
 let activeAssistantBubble = null;
-let isFirstChunk = true;
 let hasStrippedJarvisPrefix = false;
 
-// Stream handlers - registered once to avoid memory leaks
-window.ltm.onStreamChunk((chunk) => {
-  if (!activeAssistantBubble) return;
-  const contentEl = activeAssistantBubble.querySelector('.bubble-content');
-  if (!contentEl) return;
-  if (isFirstChunk) {
-    contentEl.innerHTML = ''; // Clear the typing dots
-    isFirstChunk = false;
-  }
-  contentEl.textContent += chunk;
-  if (!hasStrippedJarvisPrefix && /^JARVIS Insight:\s*/i.test(contentEl.textContent)) {
-    contentEl.textContent = contentEl.textContent.replace(/^JARVIS Insight:\s*/i, '');
-    hasStrippedJarvisPrefix = true;
-  }
-  output.scrollTop = output.scrollHeight;
-});
-
-window.ltm.onStreamDone(() => {
+// Stream handlers - no onStreamChunk; we use onStreamDone with finalText only
+window.ltm.onStreamDone((finalText) => {
   console.log('[Renderer] Stream completed');
+  // Remove the typing indicator bubble
   if (activeAssistantBubble) {
-    activeAssistantBubble.classList.remove('streaming');
+    activeAssistantBubble.remove();
+    activeAssistantBubble = null;
   }
-  activeAssistantBubble = null;
+
+  let text = (finalText ?? '').trim();
+  if (/^JARVIS Insight:\s*/i.test(text)) {
+    text = text.replace(/^JARVIS Insight:\s*/i, '');
+  }
+
+  const paragraphs = text ? text.split('\n\n').filter((p) => p.trim() !== '') : [];
+  const toAppend = paragraphs.length > 0 ? paragraphs : [text || ''];
+
+  for (const p of toAppend) {
+    appendLine(p, 'assistant');
+  }
+
   hasStrippedJarvisPrefix = false;
   setStatus('Idle');
   btnChat.disabled = false;
   input.focus();
+  output.scrollTop = output.scrollHeight;
 });
 
 window.ltm.onStreamError((err) => {
@@ -83,6 +81,67 @@ async function initRagSession() {
   }
 }
 
+function updateUploadButtonState() {
+  const modelSelect = document.getElementById('model-select');
+  const uploadBtn = document.getElementById('upload-img-btn');
+  if (!modelSelect || !uploadBtn) return;
+  const filename = (modelSelect.value || '').toLowerCase();
+  const isVision = filename.includes('vl') || filename.includes('vision');
+  if (isVision) {
+    uploadBtn.removeAttribute('disabled');
+  } else {
+    uploadBtn.setAttribute('disabled', '');
+  }
+}
+
+/**
+ * Appends a system inline notification (centered, italic).
+ * @param {string} text - The notification text
+ */
+function appendSystemMessage(text) {
+  const el = document.createElement('div');
+  el.className = 'system-msg';
+  el.textContent = text;
+  output.appendChild(el);
+  output.scrollTop = output.scrollHeight;
+}
+
+/**
+ * Appends a chat bubble to the output.
+ * @param {string} content - The message text
+ * @param {'user'|'assistant'|'system'|'ingest'} sender - Sender type
+ * @returns {HTMLElement} The bubble element
+ */
+function appendLine(content, sender = 'system') {
+  const bubble = document.createElement('div');
+  bubble.className = `bubble ${sender}`;
+  const contentEl = document.createElement('div');
+  contentEl.className = 'bubble-content';
+  contentEl.textContent = content;
+  bubble.appendChild(contentEl);
+
+  if (sender === 'assistant') {
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'copy-btn';
+    copyBtn.textContent = 'Copy';
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(content).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+      });
+    });
+    bubble.appendChild(copyBtn);
+  }
+
+  output.appendChild(bubble);
+  output.scrollTop = output.scrollHeight;
+  return bubble;
+}
+
+function setStatus(msg) {
+  statusEl.textContent = msg;
+}
+
 // Set models dropdown, version, personas, and auto-init on load
 window.addEventListener('DOMContentLoaded', async () => {
   const version = await window.ltm.getAppVersion();
@@ -92,7 +151,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const modelSelect = document.getElementById('model-select');
   const personaSelect = document.getElementById('persona-select');
 
-  models.forEach(m => {
+  models.forEach((m) => {
     const opt = document.createElement('option');
     opt.value = m.path;
     opt.textContent = m.name;
@@ -100,26 +159,38 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   const personas = await window.ltm.getPersonas();
-  personas.forEach(p => {
+  personas.forEach((p) => {
     const opt = document.createElement('option');
     opt.value = p.path;
     opt.textContent = p.name;
     personaSelect.appendChild(opt);
   });
-  if (personas.length > 0) {
-    const analytical = personas.find(p => p.name === 'Analytical');
+
+  // Restore last model and persona from localStorage
+  const lastModel = localStorage.getItem('lastModel');
+  const lastPersona = localStorage.getItem('lastPersona');
+  if (lastModel && [...modelSelect.options].some((o) => o.value === lastModel)) {
+    modelSelect.value = lastModel;
+  } else if (models.length > 0) {
+    modelSelect.value = models[0].path;
+  }
+  if (lastPersona && [...personaSelect.options].some((o) => o.value === lastPersona)) {
+    personaSelect.value = lastPersona;
+  } else if (personas.length > 0) {
+    const analytical = personas.find((p) => p.name === 'Analytical');
     personaSelect.value = analytical ? analytical.path : personas[0].path;
   }
 
   if (models.length > 0) {
-    modelSelect.value = models[0].path;
-    modelPath = models[0].path;
+    modelPath = modelSelect.value;
     const init = await initRagSession();
     if (!init.success) {
       console.log('[Renderer] Auto-init failed', init.error);
     } else {
-      console.log('[Renderer] Auto-loaded first model + persona');
+      console.log('[Renderer] Auto-loaded model + persona');
+      appendSystemMessage('System loaded and ready.');
     }
+    updateUploadButtonState();
   } else {
     modelPath = await window.ltm.getDefaultModelPath();
     if (modelPath) {
@@ -134,48 +205,38 @@ window.addEventListener('DOMContentLoaded', async () => {
   modelSelect.addEventListener('change', async (e) => {
     const newPath = e.target.value;
     const prevPath = modelPath;
-    console.log('[Renderer] Model changed to:', newPath);
+    appendSystemMessage('Switching neural pathways... please standby.');
+    localStorage.setItem('lastModel', newPath);
+    updateUploadButtonState();
+
     const init = await initRagSession();
     if (!init.success) {
       e.target.value = prevPath || models[0]?.path || '';
+      console.log('[Renderer] Model change failed', init.error);
     } else {
       modelPath = newPath;
+      appendSystemMessage('System loaded and ready.');
     }
   });
 
   personaSelect.addEventListener('change', async () => {
+    localStorage.setItem('lastPersona', personaSelect.value);
     console.log('[Renderer] Persona changed');
     await initRagSession();
   });
+
+  // Image upload button: open file picker
+  const uploadImgBtn = document.getElementById('upload-img-btn');
+  const imageInput = document.getElementById('image-input');
+  if (uploadImgBtn && imageInput) {
+    uploadImgBtn.addEventListener('click', () => imageInput.click());
+  }
 });
-
-/**
- * Appends a chat bubble to the output.
- * @param {string} content - The message text
- * @param {'user'|'assistant'|'system'|'ingest'} type - Sender type
- * @returns {HTMLElement} The bubble element (with .bubble-content child for streaming)
- */
-function appendLine(content, type = 'system') {
-  const bubble = document.createElement('div');
-  bubble.className = `bubble ${type}`;
-  const contentEl = document.createElement('div');
-  contentEl.className = 'bubble-content';
-  contentEl.textContent = content;
-  bubble.appendChild(contentEl);
-  output.appendChild(bubble);
-  output.scrollTop = output.scrollHeight;
-  return bubble;
-}
-
-function setStatus(msg) {
-  statusEl.textContent = msg;
-}
 
 async function onChat() {
   const text = input.value.trim();
   if (!text) return;
 
-  // Immediate UI update - before any await
   appendLine(text, 'user');
   input.value = '';
 
@@ -184,8 +245,6 @@ async function onChat() {
   const contentEl = bubble.querySelector('.bubble-content');
   contentEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
   activeAssistantBubble = bubble;
-  isFirstChunk = true;
-  hasStrippedJarvisPrefix = false;
 
   setStatus('Initializing RAG…');
   btnChat.disabled = true;

@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('ltm', {
   },
 
   onStreamDone: (callback) => {
-    ipcRenderer.on('brainstorm:stream-done', callback);
+    ipcRenderer.on('brainstorm:stream-done', (_, { finalText }) => callback(finalText ?? ''));
   },
 
   onStreamError: (callback) => {

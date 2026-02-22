@@ -24,6 +24,8 @@
           autofocus
         ></textarea>
         <div class="input-actions">
+          <button id="upload-img-btn" class="btn" disabled>📷 Add Image</button>
+          <input type="file" id="image-input" style="display:none" accept="image/*">
           <button id="btn-chat" class="btn btn-primary" title="RAG chat (requires model)">Send</button>
         </div>
       </div>
@@ -36,7 +38,7 @@
         <select id="persona-select" class="model-dropdown"></select>
         <span id="model-status">Model: not loaded</span>
       </span>
-      <span id="version">v1.0.0</span>
+      <span id="version">v1.1.0</span>
       <button id="btn-wipe-ltm" class="btn-wipe-ltm" title="Clear all Long-Term Memory">Wipe LTM</button>
     </div>
   </div>

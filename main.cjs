@@ -175,10 +175,10 @@ ipcMain.handle('brainstorm:stream-rag', async (event, { prompt }) => {
   }
 
   try {
-    await streamRagResponse('default', prompt, (chunk) => {
+    const finalText = await streamRagResponse('default', prompt, (chunk) => {
       win.webContents.send('brainstorm:stream-chunk', { chunk });
     });
-    win.webContents.send('brainstorm:stream-done', {});
+    win.webContents.send('brainstorm:stream-done', { finalText: finalText ?? '' });
     console.log('[Main] brainstorm:stream-rag completed');
     return { success: true };
   } catch (err) {

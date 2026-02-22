@@ -98,17 +98,20 @@ async function streamRagResponse(sessionId, prompt, onChunk) {
   });
 
   // Ingestion gatekeeping: avoid conversational filler
-  if (prompt.length < 20) return;
+  if (prompt.length >= 20) {
+    // Strip emojis before saving to prevent emoji pollution in LTM
+    const cleanedResponse = assistantResponse.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2300}-\u{23FF}\u{2B50}\u{2705}\u{274C}\u{274E}\u{2139}\u{2122}\u{00A9}\u{00AE}\u{FE00}-\u{FE0F}\u{200D}\u{1F1E0}-\u{1F1FF}]/gu, '').replace(/\s{2,}/g, ' ').trim();
 
-  // Strip emojis before saving to prevent emoji pollution in LTM
-  const cleanedResponse = assistantResponse.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2300}-\u{23FF}\u{2B50}\u{2705}\u{274C}\u{274E}\u{2139}\u{2122}\u{00A9}\u{00AE}\u{FE00}-\u{FE0F}\u{200D}\u{1F1E0}-\u{1F1FF}]/gu, '').replace(/\s{2,}/g, ' ').trim();
+    const firstSentence = cleanedResponse.split(/[.!?\n]/)[0].trim();
+    if (firstSentence) {
+      const memoryBlock = `Log - Human stated: "${prompt}" | AI replied: "${firstSentence}"`;
+      ingestBrainstorm(memoryBlock, ['auto-memory'])
+        .then(() => console.log('✅ Auto-ingested to LTM'))
+        .catch((err) => console.error('[LLM] Auto-ingest failed:', err));
+    }
+  }
 
-  const firstSentence = cleanedResponse.split(/[.!?\n]/)[0].trim();
-  if (!firstSentence) return;
-  const memoryBlock = `Log - Human stated: "${prompt}" | AI replied: "${firstSentence}"`;
-  ingestBrainstorm(memoryBlock, ['auto-memory'])
-    .then(() => console.log('✅ Auto-ingested to LTM'))
-    .catch((err) => console.error('[LLM] Auto-ingest failed:', err));
+  return assistantResponse;
 }
 
 module.exports = { createRagSession, streamRagResponse };

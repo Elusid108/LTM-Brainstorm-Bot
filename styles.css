@@ -66,6 +66,34 @@ html, body {
   border-radius: 16px;
   word-wrap: break-word;
   line-height: 1.5;
+  position: relative;
+}
+
+/* System inline notifications (centered, italic) */
+.system-msg {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin: 10px 0;
+  font-style: italic;
+}
+
+/* Copy button - appears on bubble hover */
+.copy-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.8rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.bubble:hover .copy-btn {
+  opacity: 1;
 }
 
 .bubble-content {
