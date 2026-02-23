@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, MenuItem } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
@@ -24,6 +24,41 @@ async function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    const menu = new Menu();
+
+    // 1. Spelling suggestions
+    for (const suggestion of params.dictionarySuggestions || []) {
+      menu.append(new MenuItem({
+        label: suggestion,
+        click: () => mainWindow.webContents.replaceMisspelling(suggestion)
+      }));
+    }
+
+    // 2. Add to Dictionary (when a misspelled word is present)
+    if (params.misspelledWord) {
+      menu.append(new MenuItem({
+        label: 'Add to Dictionary',
+        click: () => mainWindow.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+      }));
+      menu.append(new MenuItem({ type: 'separator' }));
+    }
+
+    // 3. Edit commands
+    if (params.isEditable) {
+      menu.append(new MenuItem({ role: 'cut' }));
+      menu.append(new MenuItem({ role: 'copy' }));
+      menu.append(new MenuItem({ role: 'paste' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ role: 'selectAll' }));
+    } else if (params.selectionText) {
+      menu.append(new MenuItem({ role: 'copy' }));
+    }
+
+    if (menu.items.length > 0) {
+      menu.popup({ window: mainWindow });
+    }
+  });
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     if (process.env.LTM_DEVTOOLS === '1') {
