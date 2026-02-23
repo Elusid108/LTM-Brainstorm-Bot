@@ -136,10 +136,10 @@ ipcMain.handle('brainstorm:get-models', () => {
 });
 
 // IPC: Ingest a brainstorm (save thought + embed + store)
-ipcMain.handle('brainstorm:ingest', async (_, { text, projectTags }) => {
-  console.log('[Main] brainstorm:ingest received', { textLength: text?.length, projectTags });
+ipcMain.handle('brainstorm:ingest', async (_, { text, projectTags, persona }) => {
+  console.log('[Main] brainstorm:ingest received', { textLength: text?.length, projectTags, persona });
   try {
-    const id = await ingestBrainstorm(text, projectTags || []);
+    const id = await ingestBrainstorm(text, projectTags || [], persona ?? 'Global');
     console.log('[Main] brainstorm:ingest success', { id });
     return { success: true, id };
   } catch (err) {
@@ -162,10 +162,10 @@ ipcMain.handle('brainstorm:clear', async () => {
 });
 
 // IPC: Retrieve similar brainstorms (RAG context)
-ipcMain.handle('brainstorm:retrieve', async (_, { query, limit }) => {
-  console.log('[Main] brainstorm:retrieve received', { query, limit });
+ipcMain.handle('brainstorm:retrieve', async (_, { query, limit, persona, isolate }) => {
+  console.log('[Main] brainstorm:retrieve received', { query, limit, persona, isolate });
   try {
-    const results = await retrieveSimilar(query, limit ?? 5);
+    const results = await retrieveSimilar(query, limit ?? 5, { persona, isolate });
     console.log('[Main] brainstorm:retrieve success', { resultCount: results?.length });
     return { success: true, results };
   } catch (err) {
@@ -193,8 +193,8 @@ ipcMain.handle('brainstorm:rag-chat', async (_, { modelPath, systemPrompt }) => 
 });
 
 // IPC: Stream RAG response (retrieve + LLM stream)
-ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image }) => {
-  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length, hasImage: !!image });
+ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, persona, isolate }) => {
+  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length, hasImage: !!image, persona, isolate });
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) {
     console.error('[Main] brainstorm:stream-rag: no window');
@@ -202,7 +202,7 @@ ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image }) => {
   }
 
   try {
-    const promptPayload = { text: prompt, image: image ?? null };
+    const promptPayload = { text: prompt, image: image ?? null, persona: persona ?? 'Global', isolate: isolate ?? false };
     const finalText = await streamRagResponse('default', promptPayload, (chunk) => {
       win.webContents.send('brainstorm:stream-chunk', { chunk });
     });

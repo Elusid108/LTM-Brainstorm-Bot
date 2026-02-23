@@ -82,16 +82,15 @@ async function createRagSession(modelPath, systemPrompt) {
 }
 
 async function streamRagResponse(sessionId, promptPayload, onChunk) {
-  const userText = promptPayload.text;
-  const userImage = promptPayload.image;
-  console.log('[LLM] streamRagResponse: starting', { sessionId, promptLength: userText?.length, hasImage: !!userImage });
+  const { text: userText, image: userImage, persona, isolate } = promptPayload;
+  console.log('[LLM] streamRagResponse: starting', { sessionId, promptLength: userText?.length, hasImage: !!userImage, persona, isolate });
   const { retrieveSimilar } = require('./database.cjs');
   if (!session) {
     console.error('[LLM] streamRagResponse: session not initialized');
     throw new Error('LLM session not initialized. Call createRagSession first.');
   }
 
-  const results = await retrieveSimilar(userText, 5);
+  const results = await retrieveSimilar(userText, 5, { persona, isolate });
   console.log('[LLM] streamRagResponse: retrieved', results?.length, 'context items');
   const contextBlock = results.length
     ? results
@@ -107,11 +106,10 @@ async function streamRagResponse(sessionId, promptPayload, onChunk) {
 
   let finalInput = fullPrompt;
   if (userImage) {
-    console.log('[LLM] Processing image payload...');
-    const base64Data = userImage.replace(/^data:image\/\w+;base64,/, "");
+    console.log('[LLM] Attaching pure binary image buffer to payload...');
     finalInput = [
-      { type: "text", text: fullPrompt },
-      { type: "image", data: base64Data }
+      fullPrompt,
+      { type: "image", data: userImage }  // userImage is Buffer (from IPC)
     ];
   }
 
@@ -150,7 +148,8 @@ async function streamRagResponse(sessionId, promptPayload, onChunk) {
     const firstSentence = cleanedResponse.split(/[.!?\n]/)[0].trim();
     if (firstSentence) {
       const memoryBlock = `Log - Human stated: "${userText}" | AI replied: "${firstSentence}"`;
-      ingestBrainstorm(memoryBlock, ['auto-memory'])
+      const personaTag = isolate ? (persona || 'Global') : 'Global';
+      ingestBrainstorm(memoryBlock, ['auto-memory'], personaTag)
         .then(() => console.log('✅ Auto-ingested to LTM'))
         .catch((err) => console.error('[LLM] Auto-ingest failed:', err));
     }

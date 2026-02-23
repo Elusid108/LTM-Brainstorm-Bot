@@ -270,7 +270,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     uploadImgBtn.addEventListener('click', () => imageInput.click());
   }
 
-  // Image input: process file, resize to max 1024px, export as JPEG
+  // Image input: process file, resize to max 1024px, export as Base64
   if (imageInput) {
     imageInput.addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
@@ -301,13 +301,14 @@ window.addEventListener('DOMContentLoaded', async () => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        currentBase64Image = canvas.toDataURL('image/jpeg', 0.8);
-        if (previewImg) previewImg.src = currentBase64Image;
-        if (imagePreviewContainer) imagePreviewContainer.style.display = 'block';
+        const base64String = canvas.toDataURL('image/jpeg', 0.8);
+        currentBase64Image = base64String;
+        document.getElementById('preview-img').src = currentBase64Image;
+        document.getElementById('image-preview-container').style.display = 'block';
+        document.getElementById('upload-img-btn').textContent = '📷 Image Added';
       } catch (err) {
         console.error('[Renderer] Image processing failed:', err);
       } finally {
-        if (uploadImgBtn) uploadImgBtn.textContent = '📷 Add Image';
         imageInput.value = '';
       }
     });
@@ -360,7 +361,11 @@ async function onChat() {
     console.log('[Renderer] Stream started');
     setStatus('Streaming…');
 
-    const payload = { text: prompt, image: currentBase64Image };
+    const personaSelect = document.getElementById('persona-select');
+    const currentPersona = personaSelect?.options[personaSelect.selectedIndex]?.text || 'Global';
+    const isIsolated = document.getElementById('isolate-memory-chk')?.checked ?? false;
+
+    const payload = { text: prompt, image: currentBase64Image, persona: currentPersona, isolate: isIsolated };
     await window.ltm.streamRagResponse(payload);
 
     currentBase64Image = null;

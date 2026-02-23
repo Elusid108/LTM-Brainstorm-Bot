@@ -33,6 +33,18 @@ function initDatabase(dbPath) {
             )
           `);
 
+          db.run("ALTER TABLE brainstorms ADD COLUMN persona TEXT DEFAULT 'Global'", (alterErr) => {
+            if (alterErr && !alterErr.message.includes('duplicate column')) {
+              console.warn('[DB] ALTER TABLE persona:', alterErr.message);
+            } else if (!alterErr) {
+              console.log('[DB] Added persona column to brainstorms table');
+            }
+          });
+
+          db.run("UPDATE brainstorms SET persona = 'Global' WHERE persona IS NULL", (updateErr) => {
+            if (updateErr) console.warn('[DB] Backfill persona:', updateErr.message);
+          });
+
           db.run(`
             CREATE VIRTUAL TABLE IF NOT EXISTS vec_brainstorms USING vec0(
               brainstorm_id INTEGER PRIMARY KEY,
@@ -51,8 +63,8 @@ function initDatabase(dbPath) {
   });
 }
 
-async function ingestBrainstorm(text, projectTags = []) {
-  console.log('[DB] ingestBrainstorm: starting', { textLength: text?.length, textPreview: text?.slice(0, 80) });
+async function ingestBrainstorm(text, projectTags = [], persona = 'Global') {
+  console.log('[DB] ingestBrainstorm: starting', { textLength: text?.length, textPreview: text?.slice(0, 80), persona });
   const { embedText } = await import('./embeddings.js');
   return new Promise(async (resolve, reject) => {
     try {
@@ -61,8 +73,8 @@ async function ingestBrainstorm(text, projectTags = []) {
       const tagsStr = Array.isArray(projectTags) ? projectTags.join(',') : String(projectTags);
 
       db.run(
-        'INSERT INTO brainstorms (text, project_tags) VALUES (?, ?)',
-        [text, tagsStr],
+        'INSERT INTO brainstorms (text, project_tags, persona) VALUES (?, ?, ?)',
+        [text, tagsStr, persona],
         function (err) {
           if (err) {
             console.error('Error in ingestBrainstorm (INSERT brainstorms):', err);
@@ -93,8 +105,9 @@ async function ingestBrainstorm(text, projectTags = []) {
   });
 }
 
-async function retrieveSimilar(query, limit = 5) {
-  console.log('[DB] retrieveSimilar: starting', { query, limit });
+async function retrieveSimilar(query, limit = 5, options = {}) {
+  const { persona, isolate } = options;
+  console.log('[DB] retrieveSimilar: starting', { query, limit, persona, isolate });
   const { embedText } = await import('./embeddings.js');
   return new Promise(async (resolve, reject) => {
     try {
@@ -102,18 +115,26 @@ async function retrieveSimilar(query, limit = 5) {
       const vecJson = JSON.stringify(Array.from(queryEmbedding));
       console.log('[DB] retrieveSimilar: query embedding computed', { dim: queryEmbedding?.length });
 
-      db.all(
-        `SELECT v.brainstorm_id as id, b.text, b.project_tags, b.created_at, v.distance
-         FROM vec_brainstorms v
-         JOIN brainstorms b ON b.id = v.brainstorm_id
-         WHERE v.embedding MATCH ? AND k = ?`,
-        [vecJson, limit],
+      const k = isolate ? Math.max(limit, 15) : limit;
+      const sql = isolate
+        ? `SELECT v.brainstorm_id as id, b.text, b.project_tags, b.created_at, v.distance
+           FROM vec_brainstorms v
+           JOIN brainstorms b ON b.id = v.brainstorm_id
+           WHERE v.embedding MATCH ? AND k = ?
+             AND (b.persona = ? OR b.persona = 'Global')`
+        : `SELECT v.brainstorm_id as id, b.text, b.project_tags, b.created_at, v.distance
+           FROM vec_brainstorms v
+           JOIN brainstorms b ON b.id = v.brainstorm_id
+           WHERE v.embedding MATCH ? AND k = ?`;
+      const params = isolate ? [vecJson, k, persona || 'Global'] : [vecJson, k];
+
+      db.all(sql, params,
         (err, rows) => {
           if (err) {
             console.error('Error in retrieveSimilar:', err);
             return reject(err);
           }
-          const results = rows || [];
+          const results = (rows || []).slice(0, limit);
           const relevantRows = results.filter(row => row.distance < 0.75);
           console.log('[DB] retrieveSimilar: retrieved rows', results.map(r => ({
             id: r.id,
