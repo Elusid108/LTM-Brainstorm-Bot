@@ -15,9 +15,17 @@ async function createRagSession(modelPath, systemPrompt) {
   return true;
 }
 
+function stripDataUrl(img) {
+  if (typeof img === 'string') {
+    return img.replace(/^data:image\/\w+;base64,/, '');
+  }
+  if (Buffer.isBuffer(img)) return img.toString('base64');
+  return String(img);
+}
+
 async function streamRagResponse(sessionId, promptPayload, onChunk) {
-  const { text: userText, image: userImage, persona, isolate } = promptPayload;
-  console.log('[LLM] streamRagResponse: starting', { sessionId, promptLength: userText?.length, hasImage: !!userImage, persona, isolate });
+  const { text: userText, image: userImage, chatHistory = [], persona, isolate } = promptPayload;
+  console.log('[LLM] streamRagResponse: starting', { sessionId, promptLength: userText?.length, hasImage: !!userImage, chatHistoryLen: chatHistory?.length, persona, isolate });
   const { retrieveSimilar } = require('./database.cjs');
   if (!activeModel) {
     console.error('[LLM] streamRagResponse: session not initialized');
@@ -32,28 +40,29 @@ async function streamRagResponse(sessionId, promptPayload, onChunk) {
         .join('\n')
     : '(No relevant past thoughts in LTM)';
 
-  const fullPrompt = contextBlock !== '(No relevant past thoughts in LTM)'
-    ? `[SYSTEM NOTE: The following are historical interaction logs retrieved from Long-Term Memory. Use them to understand context, track name changes, and recall the Human's facts.]\n${contextBlock}\n\nHuman: ${userText}`
-    : `Human: ${userText}`;
+  const ltmNote = contextBlock !== '(No relevant past thoughts in LTM)'
+    ? `\n\n[SYSTEM NOTE: The following are historical interaction logs retrieved from Long-Term Memory. Use them to understand context, track name changes, and recall the Human's facts.]\n${contextBlock}`
+    : '';
+
+  const systemContent = (activeSystemPrompt || '') + ltmNote;
 
   const messages = [];
-  if (activeSystemPrompt) {
-    messages.push({ role: 'system', content: activeSystemPrompt });
+  if (systemContent.trim()) {
+    messages.push({ role: 'system', content: systemContent.trim() });
   }
-  const userMessage = { role: 'user', content: fullPrompt };
-  if (userImage) {
-    let cleanBase64;
-    if (typeof userImage === 'string') {
-      cleanBase64 = userImage.replace(/^data:image\/\w+;base64,/, '');
-    } else if (Buffer.isBuffer(userImage)) {
-      cleanBase64 = userImage.toString('base64');
-    } else {
-      cleanBase64 = String(userImage);
+
+  for (const m of chatHistory) {
+    if (m.role === 'user') {
+      const msg = { role: 'user', content: m.content };
+      if (m.images?.length) {
+        msg.images = m.images.map(stripDataUrl);
+        console.log('[LLM] Attaching image(s) to user message in history');
+      }
+      messages.push(msg);
+    } else if (m.role === 'assistant') {
+      messages.push({ role: 'assistant', content: m.content || '' });
     }
-    userMessage.images = [cleanBase64];
-    console.log('[LLM] Attaching image to Ollama request');
   }
-  messages.push(userMessage);
 
   let fullResponse = '';
   try {

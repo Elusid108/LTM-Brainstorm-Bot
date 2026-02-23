@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('ltm', {
     ipcRenderer.invoke('brainstorm:stream-rag', {
       prompt: payload?.text ?? '',
       image: payload?.image ?? null,
+      chatHistory: payload?.chatHistory ?? [],
       persona: payload?.persona ?? 'Global',
       isolate: payload?.isolate ?? false
     }),

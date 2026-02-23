@@ -209,4 +209,51 @@ function clearMemory() {
   });
 }
 
-module.exports = { getDb, initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory, savePersonaSettings, getPersonaSettings };
+function cleanOrphanedPersonas(validPersonaNames) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('Database not initialized'));
+    const validSet = new Set(Array.isArray(validPersonaNames) ? validPersonaNames : [...validPersonaNames]);
+    validSet.add('Global');
+
+    db.all(
+      "SELECT DISTINCT persona FROM brainstorms WHERE persona IS NOT NULL AND persona != '' UNION SELECT name FROM persona_settings WHERE name IS NOT NULL AND name != ''",
+      [],
+      (err, rows) => {
+        if (err) return reject(err);
+        const dbPersonas = [...new Set((rows || []).map((r) => r.persona ?? r.name).filter(Boolean))];
+        const orphaned = dbPersonas.filter((p) => !validSet.has(p));
+        if (orphaned.length === 0) {
+          console.log('[DB] cleanOrphanedPersonas: no orphaned personas');
+          return resolve();
+        }
+
+        db.serialize(() => {
+          let completed = 0;
+          const total = orphaned.length;
+          const checkDone = () => {
+            completed++;
+            if (completed >= total) {
+              console.log('[DB] cleanOrphanedPersonas: purged', orphaned);
+              resolve();
+            }
+          };
+
+          orphaned.forEach((persona) => {
+            db.run('DELETE FROM vec_brainstorms WHERE brainstorm_id IN (SELECT id FROM brainstorms WHERE persona = ?)', [persona], (vecErr) => {
+              if (vecErr) console.warn('[DB] cleanOrphanedPersonas vec delete:', vecErr.message);
+              db.run('DELETE FROM brainstorms WHERE persona = ?', [persona], (bErr) => {
+                if (bErr) console.warn('[DB] cleanOrphanedPersonas brainstorms delete:', bErr.message);
+                db.run('DELETE FROM persona_settings WHERE name = ?', [persona], (pErr) => {
+                  if (pErr) console.warn('[DB] cleanOrphanedPersonas persona_settings delete:', pErr.message);
+                  checkDone();
+                });
+              });
+            });
+          });
+        });
+      }
+    );
+  });
+}
+
+module.exports = { getDb, initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory, savePersonaSettings, getPersonaSettings, cleanOrphanedPersonas };

@@ -15,6 +15,7 @@ let modelPath = null;
 let currentBase64Image = null;
 let pendingBuffer = '';
 let isInitialLoading = false;
+let chatHistory = [];
 
 function getCurrentPersonaName() {
   const personaSelect = document.getElementById('persona-select');
@@ -42,8 +43,14 @@ function processParagraph(text) {
 }
 
 // Block-style stream parsing: accumulate chunks, emit on \n\n
+let hasReceivedFirstChunk = false;
 window.ltm.onStreamChunk((chunk) => {
   if (typingIndicator) typingIndicator.style.display = '';
+  if (!hasReceivedFirstChunk) {
+    hasReceivedFirstChunk = true;
+    btnChat.classList.remove('btn-processing');
+    btnChat.textContent = 'Send';
+  }
   pendingBuffer += chunk;
   if (pendingBuffer.includes('\n\n')) {
     const parts = pendingBuffer.split('\n\n');
@@ -53,14 +60,20 @@ window.ltm.onStreamChunk((chunk) => {
   output.scrollTop = output.scrollHeight;
 });
 
-window.ltm.onStreamDone(() => {
+window.ltm.onStreamDone((finalText) => {
   console.log('[Renderer] Stream completed');
+  hasReceivedFirstChunk = false;
   if (typingIndicator) typingIndicator.style.display = 'none';
   if (pendingBuffer.trim()) {
     processParagraph(pendingBuffer.trim());
   }
   pendingBuffer = '';
+  if (finalText) {
+    chatHistory.push({ role: 'assistant', content: finalText });
+  }
   setStatus('Idle');
+  btnChat.classList.remove('btn-processing');
+  btnChat.textContent = 'Send';
   btnChat.disabled = false;
   input.focus();
   output.scrollTop = output.scrollHeight;
@@ -68,10 +81,13 @@ window.ltm.onStreamDone(() => {
 
 window.ltm.onStreamError((err) => {
   console.error('[Renderer] Stream IPC error:', err);
+  hasReceivedFirstChunk = false;
   if (typingIndicator) typingIndicator.style.display = 'none';
   pendingBuffer = '';
   appendLine(`Error: ${err}`, 'assistant');
   setStatus('Idle');
+  btnChat.classList.remove('btn-processing');
+  btnChat.textContent = 'Send';
   btnChat.disabled = false;
   input.focus();
 });
@@ -290,6 +306,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     isInitialLoading = true;
 
     // Clear short-term memory to prevent bleed between personas
+    chatHistory = [];
     pendingBuffer = '';
     Array.from(output.children).forEach((child) => {
       if (child !== typingIndicator) child.remove();
@@ -377,6 +394,31 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
     });
   }
+
+  // Settings panel toggle
+  const settingsBtn = document.getElementById('settings-btn');
+  const settingsPanel = document.getElementById('settings-panel');
+  const settingsClose = document.getElementById('settings-close');
+  if (settingsBtn && settingsPanel) {
+    settingsBtn.addEventListener('click', () => settingsPanel.classList.toggle('closed'));
+  }
+  if (settingsClose && settingsPanel) {
+    settingsClose.addEventListener('click', () => settingsPanel.classList.add('closed'));
+  }
+
+  // Settings tab switching
+  const settingsTabs = document.querySelectorAll('.settings-tab');
+  const settingsPanels = document.querySelectorAll('.settings-tab-panel');
+  settingsTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const tabId = tab.getAttribute('data-tab');
+      settingsTabs.forEach((t) => t.classList.remove('active'));
+      settingsPanels.forEach((p) => {
+        p.classList.toggle('active', p.id === `tab-${tabId}`);
+      });
+      tab.classList.add('active');
+    });
+  });
 });
 
 async function onChat() {
@@ -393,6 +435,10 @@ async function onChat() {
     appendLine(`Error: ${msg}`, 'assistant');
     if (typingIndicator) typingIndicator.style.display = 'none';
     setStatus('Idle');
+    const last = chatHistory[chatHistory.length - 1];
+    if (last?.role === 'user' && last?.content === prompt) chatHistory.pop();
+    btnChat.classList.remove('btn-processing');
+    btnChat.textContent = 'Send';
     btnChat.disabled = false;
     input.focus();
   }
@@ -420,7 +466,23 @@ async function onChat() {
     const currentPersona = personaSelect?.options[personaSelect.selectedIndex]?.text || 'Global';
     const isIsolated = document.getElementById('isolate-memory-chk')?.checked ?? false;
 
-    const payload = { text: prompt, image: currentBase64Image, persona: currentPersona, isolate: isIsolated };
+    const userMsg = currentBase64Image
+      ? { role: 'user', content: prompt, images: [currentBase64Image] }
+      : { role: 'user', content: prompt };
+    chatHistory.push(userMsg);
+
+    const payload = {
+      text: prompt,
+      image: currentBase64Image,
+      chatHistory: [...chatHistory],
+      persona: currentPersona,
+      isolate: isIsolated
+    };
+
+    if (currentBase64Image) {
+      btnChat.textContent = 'Processing Vision...';
+      btnChat.classList.add('btn-processing');
+    }
     await window.ltm.streamRagResponse(payload);
 
     currentBase64Image = null;

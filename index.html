@@ -48,7 +48,31 @@
         <span id="model-status">Model: not loaded</span>
       </span>
       <span id="version">v1.1.6</span>
+      <button id="settings-btn" class="btn-icon" title="Settings">&#9881;</button>
       <button id="btn-wipe-ltm" class="btn-wipe-ltm" title="Clear all Long-Term Memory">Wipe LTM</button>
+    </div>
+  </div>
+
+  <div id="settings-panel" class="settings-panel closed">
+    <div class="settings-header">
+      <h3>Settings</h3>
+      <button id="settings-close" class="btn-icon" type="button">×</button>
+    </div>
+    <div class="settings-tabs">
+      <button class="settings-tab active" data-tab="general">General</button>
+      <button class="settings-tab" data-tab="database">Database</button>
+      <button class="settings-tab" data-tab="models">Models</button>
+    </div>
+    <div class="settings-content">
+      <div id="tab-general" class="settings-tab-panel active">
+        <p class="settings-desc">General application settings.</p>
+      </div>
+      <div id="tab-database" class="settings-tab-panel">
+        <p class="settings-desc">Database and storage options.</p>
+      </div>
+      <div id="tab-models" class="settings-tab-panel">
+        <p class="settings-desc">Model configuration.</p>
+      </div>
     </div>
   </div>
 

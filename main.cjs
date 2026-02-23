@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, Menu, MenuItem, dialog } = require('electro
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
-const { initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory, savePersonaSettings, getPersonaSettings } = require('./src/database.cjs');
+const { initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory, savePersonaSettings, getPersonaSettings, cleanOrphanedPersonas } = require('./src/database.cjs');
 const { createRagSession, streamRagResponse } = require('./src/llm.cjs');
 
 let mainWindow = null;
@@ -114,6 +114,12 @@ app.whenReady().then(async () => {
   const dbPath = path.join(app.getPath('userData'), 'ltm-brainstorm.db');
   console.log('[Main] Initializing database', { dbPath });
   await initDatabase(dbPath);
+
+  const validPersonaNames = fs.readdirSync(personasDir, { withFileTypes: true })
+    .filter((f) => !f.isDirectory() && f.name.endsWith('.txt'))
+    .map((f) => f.name.replace('.txt', ''));
+  await cleanOrphanedPersonas(validPersonaNames);
+
   console.log('[Main] Database initialized, creating window');
   createWindow();
 
@@ -255,8 +261,8 @@ ipcMain.handle('brainstorm:rag-chat', async (_, { modelPath, systemPrompt }) => 
 });
 
 // IPC: Stream RAG response (retrieve + LLM stream)
-ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, persona, isolate }) => {
-  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length, hasImage: !!image, persona, isolate });
+ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, chatHistory, persona, isolate }) => {
+  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length, hasImage: !!image, chatHistoryLen: chatHistory?.length, persona, isolate });
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) {
     console.error('[Main] brainstorm:stream-rag: no window');
@@ -264,7 +270,7 @@ ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, persona, 
   }
 
   try {
-    const promptPayload = { text: prompt, image: image ?? null, persona: persona ?? 'Global', isolate: isolate ?? false };
+    const promptPayload = { text: prompt, image: image ?? null, chatHistory: chatHistory ?? [], persona: persona ?? 'Global', isolate: isolate ?? false };
     const finalText = await streamRagResponse('default', promptPayload, (chunk) => {
       win.webContents.send('brainstorm:stream-chunk', { chunk });
     });
