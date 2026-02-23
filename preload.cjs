@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('ltm', {
   getModels: () => ipcRenderer.invoke('brainstorm:get-models'),
   getPersonas: () => ipcRenderer.invoke('brainstorm:get-personas'),
   readPersona: (filePath) => ipcRenderer.invoke('brainstorm:read-persona', filePath),
+  savePersonaSettings: (name, model, isolate) =>
+    ipcRenderer.invoke('brainstorm:save-persona-settings', { name, model, isolate }),
+  getPersonaSettings: (name) =>
+    ipcRenderer.invoke('brainstorm:get-persona-settings', { name }),
 
   ingest: (text, projectTags = []) =>
     ipcRenderer.invoke('brainstorm:ingest', { text, projectTags }),

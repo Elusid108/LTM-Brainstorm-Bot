@@ -14,6 +14,12 @@ const uploadImgBtn = document.getElementById('upload-img-btn');
 let modelPath = null;
 let currentBase64Image = null;
 let pendingBuffer = '';
+let isInitialLoading = false;
+
+function getCurrentPersonaName() {
+  const personaSelect = document.getElementById('persona-select');
+  return personaSelect?.options[personaSelect.selectedIndex]?.text || 'Global';
+}
 
 /**
  * Parses a single paragraph into bubbles: splits by *action* blocks (preserving asterisks).
@@ -222,6 +228,20 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (models.length > 0) {
+    isInitialLoading = true;
+    try {
+      const personaName = getCurrentPersonaName();
+      const settings = await window.ltm.getPersonaSettings(personaName);
+      if (settings?.model && [...modelSelect.options].some((o) => o.value === settings.model)) {
+        modelSelect.value = settings.model;
+        modelPath = settings.model;
+      }
+      const isolateChk = document.getElementById('isolate-memory-chk');
+      if (isolateChk) isolateChk.checked = !!settings?.isolate;
+    } finally {
+      isInitialLoading = false;
+    }
+
     modelPath = modelSelect.value;
     const init = await initRagSession();
     if (!init.success) {
@@ -243,6 +263,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   modelSelect.addEventListener('change', async (e) => {
+    if (isInitialLoading) return;
+
     const newPath = e.target.value;
     const prevPath = modelPath;
     appendSystemMessage('Switching neural pathways... please standby.');
@@ -256,14 +278,47 @@ window.addEventListener('DOMContentLoaded', async () => {
     } else {
       modelPath = newPath;
       appendSystemMessage('System loaded and ready.');
+      const isolateChk = document.getElementById('isolate-memory-chk');
+      await window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk?.checked ?? false);
     }
   });
 
   personaSelect.addEventListener('change', async () => {
+    const personaName = getCurrentPersonaName();
     localStorage.setItem('lastPersona', personaSelect.value);
-    console.log('[Renderer] Persona changed');
-    await initRagSession();
+
+    isInitialLoading = true;
+
+    // Clear short-term memory to prevent bleed between personas
+    pendingBuffer = '';
+    Array.from(output.children).forEach((child) => {
+      if (child !== typingIndicator) child.remove();
+    });
+    appendSystemMessage('Persona switched. Ready for a fresh conversation.');
+
+    try {
+      const settings = await window.ltm.getPersonaSettings(personaName);
+
+      if (settings?.model && [...modelSelect.options].some((o) => o.value === settings.model)) {
+        modelSelect.value = settings.model;
+        modelPath = settings.model;
+      }
+      const isolateChk = document.getElementById('isolate-memory-chk');
+      if (isolateChk) isolateChk.checked = !!settings?.isolate;
+
+      await initRagSession();
+    } finally {
+      isInitialLoading = false;
+    }
   });
+
+  const isolateChk = document.getElementById('isolate-memory-chk');
+  if (isolateChk) {
+    isolateChk.addEventListener('change', () => {
+      if (isInitialLoading) return;
+      window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk.checked);
+    });
+  }
 
   // Image upload button: open file picker
   if (uploadImgBtn && imageInput) {

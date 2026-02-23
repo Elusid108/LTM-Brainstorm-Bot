@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
-const { initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory } = require('./src/database.cjs');
+const { initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory, savePersonaSettings, getPersonaSettings } = require('./src/database.cjs');
 const { createRagSession, streamRagResponse } = require('./src/llm.cjs');
 
 let mainWindow = null;
@@ -119,6 +119,23 @@ ipcMain.handle('brainstorm:get-personas', () => {
 // IPC: Read persona file contents
 ipcMain.handle('brainstorm:read-persona', (_, filePath) => {
   return fs.readFileSync(filePath, 'utf-8');
+});
+
+// IPC: Save persona settings (model, isolate per persona)
+ipcMain.handle('brainstorm:save-persona-settings', async (_, { name, model, isolate }) => {
+  try {
+    await savePersonaSettings(name, model, isolate);
+    return { success: true };
+  } catch (err) {
+    console.error('[Main] brainstorm:save-persona-settings:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC: Get persona settings (returns default if none saved)
+ipcMain.handle('brainstorm:get-persona-settings', async (_, { name }) => {
+  const row = await getPersonaSettings(name);
+  return row || { model: 'qwen2.5-vl:latest', isolate: 0 };
 });
 
 // IPC: Get list of models from Ollama API

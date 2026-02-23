@@ -46,6 +46,14 @@ function initDatabase(dbPath) {
           });
 
           db.run(`
+            CREATE TABLE IF NOT EXISTS persona_settings (
+              name TEXT PRIMARY KEY,
+              model TEXT,
+              isolate INTEGER DEFAULT 0
+            )
+          `);
+
+          db.run(`
             CREATE VIRTUAL TABLE IF NOT EXISTS vec_brainstorms USING vec0(
               brainstorm_id INTEGER PRIMARY KEY,
               embedding float[384] distance_metric=cosine
@@ -152,6 +160,31 @@ async function retrieveSimilar(query, limit = 5, options = {}) {
   });
 }
 
+function savePersonaSettings(name, model, isolate) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('Database not initialized'));
+    const isolateInt = isolate ? 1 : 0;
+    db.run(
+      'INSERT OR REPLACE INTO persona_settings (name, model, isolate) VALUES (?, ?, ?)',
+      [name, model || null, isolateInt],
+      (err) => {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
+function getPersonaSettings(name) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('Database not initialized'));
+    db.get('SELECT name, model, isolate FROM persona_settings WHERE name = ?', [name], (err, row) => {
+      if (err) return reject(err);
+      resolve(row || null);
+    });
+  });
+}
+
 function clearMemory() {
   return new Promise((resolve, reject) => {
     if (!db) {
@@ -176,4 +209,4 @@ function clearMemory() {
   });
 }
 
-module.exports = { getDb, initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory };
+module.exports = { getDb, initDatabase, ingestBrainstorm, retrieveSimilar, clearMemory, savePersonaSettings, getPersonaSettings };
