@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, MenuItem } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, MenuItem, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
@@ -199,8 +199,20 @@ ipcMain.handle('brainstorm:ingest', async (_, { text, projectTags, persona }) =>
 });
 
 // IPC: Clear all LTM memory (wipe brainstorms + vec_brainstorms)
-ipcMain.handle('brainstorm:clear', async () => {
-  console.log('[Main] brainstorm:clear received');
+ipcMain.handle('brainstorm:clear', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'warning',
+    buttons: ['Cancel', 'Yes, Wipe Memory'],
+    defaultId: 0,
+    cancelId: 0,
+    title: 'Confirm Memory Wipe',
+    message: 'Are you sure you want to clear the Long-Term Memory?',
+    detail: 'This will permanently delete all stored memories for this persona (or global context). This cannot be undone.'
+  });
+  if (response !== 1) {
+    return { success: false };
+  }
   try {
     await clearMemory();
     console.log('[Main] brainstorm:clear success');
