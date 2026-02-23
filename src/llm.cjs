@@ -10,7 +10,8 @@ async function createRagSession(modelPath, systemPrompt) {
     return null;
   }
   activeModel = modelPath;
-  activeSystemPrompt = systemPrompt ?? '';
+  const globalFormattingRule = `\n\n[GLOBAL FORMATTING RULE]\nAlways enclose all physical actions, non-verbal cues, internal thoughts, and environmental descriptions within asterisks (*like this*). Speak dialogue normally without asterisks.`;
+  activeSystemPrompt = (systemPrompt ?? '') + globalFormattingRule;
   console.log('[LLM] createRagSession: Ollama model set');
   return true;
 }

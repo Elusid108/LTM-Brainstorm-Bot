@@ -22,6 +22,13 @@ function getCurrentPersonaName() {
   return personaSelect?.options[personaSelect.selectedIndex]?.text || 'Global';
 }
 
+function updateStatusBar(personaName, modelName) {
+  const personaLabel = document.getElementById('active-persona-label');
+  const modelLabel = document.getElementById('active-model-label');
+  if (personaLabel) personaLabel.textContent = 'Persona: ' + (personaName || 'None');
+  if (modelLabel) modelLabel.textContent = 'Model: ' + (modelName || 'None');
+}
+
 /**
  * Parses a single paragraph into bubbles: splits by *action* blocks (preserving asterisks).
  * Action blocks get italic styling; dialogue gets character-name stripping.
@@ -96,7 +103,10 @@ async function initRagSession() {
   const modelSelect = document.getElementById('model-select');
   const personaSelect = document.getElementById('persona-select');
   const model = modelSelect?.value || modelPath;
-  if (!model) return { success: false, error: 'No model path' };
+  if (!model) {
+    updateStatusBar(getCurrentPersonaName(), 'None');
+    return { success: false, error: 'No model path' };
+  }
   const personaPath = personaSelect?.value || '';
   let personaText = '';
   if (personaPath) {
@@ -105,6 +115,7 @@ async function initRagSession() {
     } catch (e) {
       console.error('[Renderer] Failed to read persona:', e);
       modelStatusEl.textContent = `Persona: ${e.message}`;
+      updateStatusBar(getCurrentPersonaName(), 'Error');
       return { success: false, error: `Persona read failed: ${e.message}` };
     }
   }
@@ -113,12 +124,15 @@ async function initRagSession() {
     const init = await window.ltm.initRagChat(model, personaText);
     if (init.success) {
       modelStatusEl.textContent = 'Model: Loaded';
+      updateStatusBar(getCurrentPersonaName(), modelSelect.options[modelSelect.selectedIndex]?.text);
     } else {
       modelStatusEl.textContent = `Model: Error - ${init.error}`;
+      updateStatusBar(getCurrentPersonaName(), 'Error');
     }
     return init;
   } catch (e) {
     modelStatusEl.textContent = `Model: Error - ${e.message}`;
+    updateStatusBar(getCurrentPersonaName(), 'Error');
     return { success: false, error: e.message };
   }
 }
@@ -286,6 +300,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     } else {
       modelStatusEl.textContent = 'Model: not loaded';
     }
+    updateStatusBar(getCurrentPersonaName(), 'None');
     modelSelect.disabled = true;
   }
 
