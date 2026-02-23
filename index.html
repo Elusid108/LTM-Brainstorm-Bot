@@ -27,16 +27,16 @@
           <img id="preview-img" alt="Preview">
           <button id="remove-img-btn" type="button">×</button>
         </div>
-        <textarea
-          id="input"
-          rows="1"
-          placeholder="Enter thought or question..."
-          autofocus
-        ></textarea>
-        <div class="input-actions">
-          <button id="upload-img-btn" class="btn" disabled>📷 Add Image</button>
+        <div class="input-row">
+          <textarea
+            id="input"
+            rows="1"
+            placeholder="Enter thought or question..."
+            autofocus
+          ></textarea>
           <input type="file" id="image-input" style="display:none" accept="image/*">
-          <button id="btn-chat" class="btn btn-primary" title="RAG chat (requires model)">Send</button>
+          <button id="upload-img-btn" title="Add Image" disabled>IMG</button>
+          <button id="btn-chat" title="Send Message">SEND</button>
         </div>
       </div>
     </div>
@@ -45,7 +45,7 @@
       <span id="status">Idle</span>
       <span id="vram-monitor">— MB</span>
       <span id="model-status">Model: not loaded</span>
-      <span id="version">v1.2.3</span>
+      <span id="version">v1.2.5</span>
       <button id="settings-btn" class="btn-icon" title="Settings">&#9881;</button>
     </div>
   </div>
@@ -79,8 +79,14 @@
         <label>Context (tokens)</label>
         <input type="range" id="context-slider" min="2048" max="32768" step="2048" value="8192">
         <span id="context-value">8192</span>
+        <label><input type="checkbox" id="thinking-chk"> Enable Deep Thinking (Chain of Thought)</label>
       </div>
     </div>
+  </div>
+
+  <div id="image-modal" class="modal hidden">
+    <span class="close-modal">&times;</span>
+    <img class="modal-content" id="modal-img" alt="">
   </div>
 
   <script src="renderer.js"></script>

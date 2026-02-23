@@ -174,10 +174,10 @@ ipcMain.handle('brainstorm:read-persona', (_, filePath) => {
   return stripPersonaTags(raw);
 });
 
-// IPC: Save persona settings (model, isolate, context_length per persona)
-ipcMain.handle('brainstorm:save-persona-settings', async (_, { name, model, isolate, context_length }) => {
+// IPC: Save persona settings (model, isolate, context_length, thinking per persona)
+ipcMain.handle('brainstorm:save-persona-settings', async (_, { name, model, isolate, context_length, thinking }) => {
   try {
-    await savePersonaSettings(name, model, isolate, context_length);
+    await savePersonaSettings(name, model, isolate, context_length, thinking);
     return { success: true };
   } catch (err) {
     console.error('[Main] brainstorm:save-persona-settings:', err);
@@ -188,7 +188,7 @@ ipcMain.handle('brainstorm:save-persona-settings', async (_, { name, model, isol
 // IPC: Get persona settings (returns default if none saved)
 ipcMain.handle('brainstorm:get-persona-settings', async (_, { name }) => {
   const row = await getPersonaSettings(name);
-  return row || { model: 'qwen2.5-vl:latest', isolate: 0, context_length: 8192 };
+  return row || { model: 'qwen2.5-vl:latest', isolate: 1, context_length: 8192, thinking: 0 };
 });
 
 // IPC: Get list of models from Ollama API
@@ -291,8 +291,8 @@ ipcMain.handle('brainstorm:rag-chat', async (_, { modelPath, systemPrompt }) => 
 });
 
 // IPC: Stream RAG response (retrieve + LLM stream)
-ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, chatHistory, persona, isolate, contextLength }) => {
-  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length, hasImage: !!image, chatHistoryLen: chatHistory?.length, persona, isolate, contextLength });
+ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, chatHistory, persona, isolate, contextLength, thinkingMode }) => {
+  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length, hasImage: !!image, chatHistoryLen: chatHistory?.length, persona, isolate, contextLength, thinkingMode });
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) {
     console.error('[Main] brainstorm:stream-rag: no window');
@@ -300,7 +300,7 @@ ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, chatHisto
   }
 
   try {
-    const promptPayload = { text: prompt, image: image ?? null, chatHistory: chatHistory ?? [], persona: persona ?? 'Global', isolate: isolate ?? false, contextLength: contextLength ?? 8192 };
+    const promptPayload = { text: prompt, image: image ?? null, chatHistory: chatHistory ?? [], persona: persona ?? 'Global', isolate: isolate ?? false, contextLength: contextLength ?? 8192, thinkingMode: thinkingMode ?? false };
     const finalText = await streamRagResponse('default', promptPayload, (chunk) => {
       win.webContents.send('brainstorm:stream-chunk', { chunk });
     });

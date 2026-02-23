@@ -153,6 +153,55 @@ html, body {
   border-top: 1px solid var(--border);
 }
 
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.input-row textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  margin-bottom: 0;
+  min-height: 40px;
+  padding: 8px 4px;
+}
+
+.input-row textarea:focus {
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.input-row button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 6px;
+  color: var(--text-dim);
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.input-row button:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.input-row button#btn-chat {
+  color: var(--accent);
+}
+
+.input-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 #image-preview-container {
   position: relative;
   margin-bottom: 10px;
@@ -305,6 +354,60 @@ html, body {
 .btn-wipe-ltm:hover {
   opacity: 1;
   color: var(--error);
+}
+
+/* Chat images (thumbnails) */
+.chat-message img,
+.bubble img {
+  max-width: 250px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 8px;
+  border: 1px solid #444;
+}
+
+/* Lightbox modal */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.9);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.modal.hidden { display: none; }
+.modal .close-modal {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  font-size: 36px;
+  color: #fff;
+  cursor: pointer;
+}
+.modal-content {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+}
+
+/* Thinking block (<think>/</think>) */
+.thought-block {
+  background: #1e1e2e;
+  border-left: 3px solid #007acc;
+  padding: 10px;
+  margin-bottom: 10px;
+  font-size: 0.9em;
+  color: #8b949e;
+  border-radius: 4px;
+}
+.thought-block summary {
+  cursor: pointer;
+  font-weight: bold;
+  color: #007acc;
 }
 
 .bubble.streaming .bubble-content::after {

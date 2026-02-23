@@ -25,7 +25,7 @@ function stripDataUrl(img) {
 }
 
 async function streamRagResponse(sessionId, promptPayload, onChunk) {
-  const { text: userText, image: userImage, chatHistory = [], persona, isolate, contextLength } = promptPayload;
+  const { text: userText, image: userImage, chatHistory = [], persona, isolate, contextLength, thinkingMode } = promptPayload;
   console.log('[LLM] streamRagResponse: starting', { sessionId, promptLength: userText?.length, hasImage: !!userImage, chatHistoryLen: chatHistory?.length, persona, isolate });
   const { retrieveSimilar } = require('./database.cjs');
   if (!activeModel) {
@@ -45,7 +45,11 @@ async function streamRagResponse(sessionId, promptPayload, onChunk) {
     ? `\n\n[SYSTEM NOTE: The following are historical interaction logs retrieved from Long-Term Memory. Use them to understand context, track name changes, and recall the Human's facts.]\n${contextBlock}`
     : '';
 
-  const systemContent = (activeSystemPrompt || '') + ltmNote;
+  const thinkingInstruction = thinkingMode === true
+    ? `\n\n[THINKING MODE ENABLED]\nBefore providing your final response, you MUST explore your reasoning process step-by-step. Enclose your entire internal monologue strictly within <think> and </think> XML tags. Do not output your final answer until you have closed the tag.`
+    : '';
+
+  const systemContent = (activeSystemPrompt || '') + ltmNote + thinkingInstruction;
 
   const messages = [];
   if (systemContent.trim()) {

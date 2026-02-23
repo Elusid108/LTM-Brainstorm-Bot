@@ -29,21 +29,41 @@ function updateStatusBar(personaName, modelName) {
   if (modelLabel) modelLabel.textContent = 'Model: ' + (modelName || 'None');
 }
 
+const DELIM_OPEN = '\u0001\u0002\u0003OPEN';
+const DELIM_CLOSE = '\u0001\u0002\u0003CLOSE';
+
+function escapeHtml(text) {
+  if (typeof text !== 'string') return '';
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function processThinkTags(text) {
+  const open = text.split('<think>').join(DELIM_OPEN);
+  const closed = open.split('</think>').join(DELIM_CLOSE);
+  const escaped = escapeHtml(closed);
+  return escaped
+    .split(DELIM_OPEN).join('<details class="thought-block"><summary>Thinking Process...</summary>')
+    .split(DELIM_CLOSE).join('</details>');
+}
+
 /**
  * Parses a single paragraph into bubbles: splits by *action* blocks (preserving asterisks).
  * Action blocks get italic styling; dialogue gets character-name stripping.
+ * Supports <think>/</think> tags: replaced with collapsible thought-block, content escaped for XSS.
  */
 function processParagraph(text) {
-  const subParts = text.split(/(\*[^*]+\*)/g).filter(part => part.trim() !== '');
+  const processed = processThinkTags(text);
+  const hasThoughtBlocks = processed.includes('thought-block');
+  const subParts = processed.split(/(\*[^*]+\*)/g).filter(part => part.trim() !== '');
   subParts.forEach(part => {
     let trimmedPart = part.trim();
     if (!trimmedPart) return;
     if (trimmedPart.startsWith('*') && trimmedPart.endsWith('*')) {
-      appendLine(trimmedPart, 'assistant', true);
+      appendLine(trimmedPart, 'assistant', true, hasThoughtBlocks);
     } else {
       trimmedPart = trimmedPart.replace(/^[a-z\s.-]+:\s*/i, '').replace(/^"|"$/g, '').trim();
       if (trimmedPart) {
-        appendLine(trimmedPart, 'assistant', false);
+        appendLine(trimmedPart, 'assistant', false, hasThoughtBlocks);
       }
     }
   });
@@ -56,13 +76,13 @@ window.ltm.onStreamChunk((chunk) => {
   if (!hasReceivedFirstChunk) {
     hasReceivedFirstChunk = true;
     btnChat.classList.remove('btn-processing');
-    btnChat.textContent = 'Send';
+    btnChat.textContent = 'SEND';
   }
   pendingBuffer += chunk;
   if (pendingBuffer.includes('\n\n')) {
     const parts = pendingBuffer.split('\n\n');
     pendingBuffer = parts.pop();
-    parts.forEach((p) => processParagraph(p));
+    parts.forEach((p) => processParagraph(p.trim()));
   }
   output.scrollTop = output.scrollHeight;
 });
@@ -80,7 +100,7 @@ window.ltm.onStreamDone((finalText) => {
   }
   setStatus('Idle');
   btnChat.classList.remove('btn-processing');
-  btnChat.textContent = 'Send';
+  btnChat.textContent = 'SEND';
   btnChat.disabled = false;
   input.focus();
   output.scrollTop = output.scrollHeight;
@@ -94,7 +114,7 @@ window.ltm.onStreamError((err) => {
   appendLine(`Error: ${err}`, 'assistant');
   setStatus('Idle');
   btnChat.classList.remove('btn-processing');
-  btnChat.textContent = 'Send';
+  btnChat.textContent = 'SEND';
   btnChat.disabled = false;
   input.focus();
 });
@@ -175,18 +195,23 @@ function appendSystemMessage(text) {
 
 /**
  * Appends a chat bubble to the output.
- * @param {string} content - The message text
+ * @param {string} content - The message text (or HTML when useHtml is true)
  * @param {'user'|'assistant'|'system'|'ingest'} sender - Sender type
  * @param {boolean} isAction - If true, style as action block (italic, blue tint)
+ * @param {boolean} useHtml - If true, render content as innerHTML (for thought blocks)
  * @returns {HTMLElement} The bubble element
  */
-function appendLine(content, sender = 'system', isAction = false) {
+function appendLine(content, sender = 'system', isAction = false, useHtml = false) {
   const bubble = document.createElement('div');
   bubble.className = `bubble ${sender}`;
   if (isAction) bubble.classList.add('action-block');
   const contentEl = document.createElement('div');
   contentEl.className = 'bubble-content';
-  contentEl.textContent = content;
+  if (useHtml) {
+    contentEl.innerHTML = content;
+  } else {
+    contentEl.textContent = content;
+  }
   bubble.appendChild(contentEl);
 
   if (sender === 'assistant') {
@@ -194,7 +219,8 @@ function appendLine(content, sender = 'system', isAction = false) {
     copyBtn.className = 'copy-btn';
     copyBtn.textContent = 'Copy';
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(content).then(() => {
+      const plainText = contentEl.innerText || contentEl.textContent || '';
+      navigator.clipboard.writeText(plainText).then(() => {
         copyBtn.textContent = 'Copied!';
         setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
       });
@@ -209,6 +235,46 @@ function appendLine(content, sender = 'system', isAction = false) {
   }
   output.scrollTop = output.scrollHeight;
   return bubble;
+}
+
+/**
+ * Appends a user message bubble, optionally with an image thumbnail (clickable for lightbox).
+ */
+function appendUserMessage(prompt, imageSrc) {
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble user';
+  const contentEl = document.createElement('div');
+  contentEl.className = 'bubble-content';
+  contentEl.textContent = prompt;
+  bubble.appendChild(contentEl);
+  if (imageSrc) {
+    const img = document.createElement('img');
+    img.src = imageSrc;
+    img.alt = 'Attached image';
+    img.addEventListener('click', () => openModal(img.src));
+    bubble.appendChild(img);
+  }
+  if (typingIndicator && typingIndicator.parentNode === output) {
+    output.insertBefore(bubble, typingIndicator);
+  } else {
+    output.appendChild(bubble);
+  }
+  output.scrollTop = output.scrollHeight;
+  return bubble;
+}
+
+function openModal(src) {
+  const modal = document.getElementById('image-modal');
+  const modalImg = document.getElementById('modal-img');
+  if (modal && modalImg) {
+    modalImg.src = src;
+    modal.classList.remove('hidden');
+  }
+}
+
+function closeModal() {
+  const modal = document.getElementById('image-modal');
+  if (modal) modal.classList.add('hidden');
 }
 
 function setStatus(msg) {
@@ -279,6 +345,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (ctxSlider) ctxSlider.value = settings?.context_length ?? 8192;
       const ctxVal = document.getElementById('context-value');
       if (ctxVal) ctxVal.textContent = ctxSlider?.value ?? 8192;
+      const thinkingChk = document.getElementById('thinking-chk');
+      if (thinkingChk) thinkingChk.checked = !!settings?.thinking;
     } finally {
       isInitialLoading = false;
     }
@@ -322,7 +390,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       appendSystemMessage('System loaded and ready.');
       const isolateChk = document.getElementById('isolate-memory-chk');
       const ctxSlider = document.getElementById('context-slider');
-      await window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk?.checked ?? false, parseInt(ctxSlider?.value || 8192, 10));
+      const thinkingChk = document.getElementById('thinking-chk');
+      await window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk?.checked ?? false, parseInt(ctxSlider?.value || 8192, 10), thinkingChk?.checked ?? false);
     }
   });
 
@@ -353,6 +422,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (ctxSlider) ctxSlider.value = settings?.context_length ?? 8192;
       const ctxVal = document.getElementById('context-value');
       if (ctxVal) ctxVal.textContent = ctxSlider?.value ?? 8192;
+      const thinkingChk = document.getElementById('thinking-chk');
+      if (thinkingChk) thinkingChk.checked = !!settings?.thinking;
 
       await initRagSession();
     } finally {
@@ -362,11 +433,19 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   const isolateChk = document.getElementById('isolate-memory-chk');
+  const thinkingChk = document.getElementById('thinking-chk');
   if (isolateChk) {
     isolateChk.addEventListener('change', () => {
       if (isInitialLoading) return;
       const ctxSlider = document.getElementById('context-slider');
-      window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk.checked, parseInt(ctxSlider?.value || 8192, 10));
+      window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk.checked, parseInt(ctxSlider?.value || 8192, 10), thinkingChk?.checked ?? false);
+    });
+  }
+  if (thinkingChk) {
+    thinkingChk.addEventListener('change', () => {
+      if (isInitialLoading) return;
+      const ctxSlider = document.getElementById('context-slider');
+      window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk?.checked ?? false, parseInt(ctxSlider?.value || 8192, 10), thinkingChk.checked);
     });
   }
 
@@ -379,7 +458,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
     contextSlider.addEventListener('change', () => {
       if (isInitialLoading) return;
-      window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk?.checked ?? false, parseInt(contextSlider.value, 10));
+      window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk?.checked ?? false, parseInt(contextSlider.value, 10), thinkingChk?.checked ?? false);
     });
   }
 
@@ -423,7 +502,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         currentBase64Image = base64String;
         document.getElementById('preview-img').src = currentBase64Image;
         document.getElementById('image-preview-container').style.display = 'block';
-        document.getElementById('upload-img-btn').textContent = '📷 Image Added';
+        const ub = document.getElementById('upload-img-btn');
+        if (ub) { ub.textContent = '📷'; ub.title = 'Image Added'; }
       } catch (err) {
         console.error('[Renderer] Image processing failed:', err);
       } finally {
@@ -438,6 +518,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       currentBase64Image = null;
       if (previewImg) previewImg.src = '';
       if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
+      const ub = document.getElementById('upload-img-btn');
+      if (ub) ub.title = 'Add Image';
     });
   }
 
@@ -465,13 +547,27 @@ window.addEventListener('DOMContentLoaded', async () => {
       tab.classList.add('active');
     });
   });
+
+  // Lightbox: close on X or background click
+  const closeModalEl = document.querySelector('.close-modal');
+  const imageModal = document.getElementById('image-modal');
+  if (closeModalEl) closeModalEl.addEventListener('click', closeModal);
+  if (imageModal) {
+    imageModal.addEventListener('click', (e) => {
+      if (e.target === imageModal) closeModal();
+    });
+  }
 });
 
 async function onChat() {
   const prompt = input.value.trim();
   if (!prompt) return;
 
-  appendLine(prompt, 'user');
+  if (currentBase64Image) {
+    appendUserMessage(prompt, currentBase64Image);
+  } else {
+    appendLine(prompt, 'user');
+  }
   input.value = '';
 
   setStatus('Initializing RAG…');
@@ -484,7 +580,7 @@ async function onChat() {
     const last = chatHistory[chatHistory.length - 1];
     if (last?.role === 'user' && last?.content === prompt) chatHistory.pop();
     btnChat.classList.remove('btn-processing');
-    btnChat.textContent = 'Send';
+    btnChat.textContent = 'SEND';
     btnChat.disabled = false;
     input.focus();
   }
@@ -523,7 +619,8 @@ async function onChat() {
       chatHistory: [...chatHistory],
       persona: currentPersona,
       isolate: isIsolated,
-      contextLength: parseInt(document.getElementById('context-slider')?.value || 8192, 10)
+      contextLength: parseInt(document.getElementById('context-slider')?.value || 8192, 10),
+      thinkingMode: document.getElementById('thinking-chk')?.checked ?? false
     };
 
     if (currentBase64Image) {

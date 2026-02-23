@@ -7,8 +7,8 @@ contextBridge.exposeInMainWorld('ltm', {
   getModels: () => ipcRenderer.invoke('brainstorm:get-models'),
   getPersonas: () => ipcRenderer.invoke('brainstorm:get-personas'),
   readPersona: (filePath) => ipcRenderer.invoke('brainstorm:read-persona', filePath),
-  savePersonaSettings: (name, model, isolate, contextLength) =>
-    ipcRenderer.invoke('brainstorm:save-persona-settings', { name, model, isolate, context_length: contextLength }),
+  savePersonaSettings: (name, model, isolate, contextLength, thinking) =>
+    ipcRenderer.invoke('brainstorm:save-persona-settings', { name, model, isolate, context_length: contextLength, thinking }),
   getPersonaSettings: (name) =>
     ipcRenderer.invoke('brainstorm:get-persona-settings', { name }),
 
@@ -33,7 +33,8 @@ contextBridge.exposeInMainWorld('ltm', {
       chatHistory: payload?.chatHistory ?? [],
       persona: payload?.persona ?? 'Global',
       isolate: payload?.isolate ?? false,
-      contextLength: payload?.contextLength ?? 8192
+      contextLength: payload?.contextLength ?? 8192,
+      thinkingMode: payload?.thinkingMode ?? false
     }),
 
   onStreamChunk: (callback) => {

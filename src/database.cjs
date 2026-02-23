@@ -59,6 +59,12 @@ function initDatabase(dbPath) {
             }
           });
 
+          db.run("ALTER TABLE persona_settings ADD COLUMN thinking INTEGER DEFAULT 0", (alterErr) => {
+            if (alterErr && !alterErr.message.includes('duplicate column')) {
+              console.warn('[DB] ALTER TABLE thinking:', alterErr.message);
+            }
+          });
+
           db.run(`
             CREATE VIRTUAL TABLE IF NOT EXISTS vec_brainstorms USING vec0(
               brainstorm_id INTEGER PRIMARY KEY,
@@ -166,14 +172,15 @@ async function retrieveSimilar(query, limit = 5, options = {}) {
   });
 }
 
-function savePersonaSettings(name, model, isolate, contextLength) {
+function savePersonaSettings(name, model, isolate, contextLength, thinking) {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('Database not initialized'));
     const isolateInt = isolate ? 1 : 0;
     const ctx = contextLength ?? 8192;
+    const thinkingInt = thinking ? 1 : 0;
     db.run(
-      'INSERT OR REPLACE INTO persona_settings (name, model, isolate, context_length) VALUES (?, ?, ?, ?)',
-      [name, model || null, isolateInt, ctx],
+      'INSERT OR REPLACE INTO persona_settings (name, model, isolate, context_length, thinking) VALUES (?, ?, ?, ?, ?)',
+      [name, model || null, isolateInt, ctx, thinkingInt],
       (err) => {
         if (err) return reject(err);
         resolve();
@@ -185,9 +192,10 @@ function savePersonaSettings(name, model, isolate, contextLength) {
 function getPersonaSettings(name) {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('Database not initialized'));
-    db.get('SELECT name, model, isolate, context_length FROM persona_settings WHERE name = ?', [name], (err, row) => {
+    db.get('SELECT name, model, isolate, context_length, thinking FROM persona_settings WHERE name = ?', [name], (err, row) => {
       if (err) return reject(err);
       if (row && row.context_length == null) row.context_length = 8192;
+      if (row && row.thinking == null) row.thinking = 0;
       resolve(row || null);
     });
   });
