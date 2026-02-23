@@ -97,9 +97,9 @@ ipcMain.handle('brainstorm:get-app-version', () => {
   return version;
 });
 
-// IPC: Get default model path (project models dir)
+// IPC: Get default model name (Ollama)
 ipcMain.handle('brainstorm:get-default-model-path', () => {
-  return path.join(__dirname, 'models', 'gemma-2-2b-it-Q4_K_M.gguf');
+  return 'llama3.2';
 });
 
 // IPC: Get list of .txt persona files from local personas directory
@@ -121,16 +121,14 @@ ipcMain.handle('brainstorm:read-persona', (_, filePath) => {
   return fs.readFileSync(filePath, 'utf-8');
 });
 
-// IPC: Get list of .gguf models from local models directory
-ipcMain.handle('brainstorm:get-models', () => {
-  const modelsDir = path.join(__dirname, 'models');
+// IPC: Get list of models from Ollama API
+ipcMain.handle('brainstorm:get-models', async () => {
   try {
-    const files = fs.readdirSync(modelsDir, { withFileTypes: true });
-    return files
-      .filter(f => !f.isDirectory() && f.name.toLowerCase().endsWith('.gguf') && !f.name.toLowerCase().includes('mmproj'))
-      .map(f => ({ name: f.name, path: path.join(modelsDir, f.name) }));
+    const response = await fetch('http://localhost:11434/api/tags');
+    const data = await response.json();
+    return (data.models || []).map(m => ({ name: m.name, path: m.name }));
   } catch (err) {
-    console.error('[Main] brainstorm:get-models:', err);
+    console.warn('[Main] Ollama not reachable:', err.message);
     return [];
   }
 });
