@@ -376,6 +376,7 @@ html, body {
 }
 
 .settings-header {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -387,6 +388,21 @@ html, body {
   font-size: 1rem;
   font-weight: 600;
   color: var(--text);
+}
+.close-btn {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.close-btn:hover {
+  color: #ffffff;
 }
 
 .settings-tabs {
@@ -430,4 +446,31 @@ html, body {
   font-size: 13px;
   color: var(--text-dim);
   line-height: 1.5;
+}
+.settings-panel select,
+.settings-panel button:not(.close-btn) {
+  width: 100%;
+  margin-top: 10px;
+  margin-bottom: 20px;
+  padding: 8px;
+  background-color: #2d2d3d;
+  color: #c9d1d9;
+  border: 1px solid #444;
+  border-radius: 4px;
+}
+.settings-panel label {
+  display: block;
+  margin-bottom: 5px;
+  color: #8b949e;
+}
+.settings-panel input[type="range"] {
+  width: 100%;
+  margin: 10px 0 4px;
+  padding: 0;
+}
+#context-value {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-left: 8px;
 }

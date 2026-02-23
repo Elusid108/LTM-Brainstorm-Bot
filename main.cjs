@@ -157,15 +157,27 @@ ipcMain.handle('brainstorm:get-personas', () => {
   }
 });
 
-// IPC: Read persona file contents
+// Strip ChatML/Llama tags from persona text; return raw prose only
+function stripPersonaTags(raw) {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .replace(/<\|im_start\|>[\w]*\n?/g, '')
+    .replace(/<\|im_end\|>\n?/g, '')
+    .replace(/\[Llama\]\s*/gi, '')
+    .replace(/\s{2,}/g, '\n')
+    .trim();
+}
+
+// IPC: Read persona file contents (prose only, tags stripped)
 ipcMain.handle('brainstorm:read-persona', (_, filePath) => {
-  return fs.readFileSync(filePath, 'utf-8');
+  const raw = fs.readFileSync(filePath, 'utf-8');
+  return stripPersonaTags(raw);
 });
 
-// IPC: Save persona settings (model, isolate per persona)
-ipcMain.handle('brainstorm:save-persona-settings', async (_, { name, model, isolate }) => {
+// IPC: Save persona settings (model, isolate, context_length per persona)
+ipcMain.handle('brainstorm:save-persona-settings', async (_, { name, model, isolate, context_length }) => {
   try {
-    await savePersonaSettings(name, model, isolate);
+    await savePersonaSettings(name, model, isolate, context_length);
     return { success: true };
   } catch (err) {
     console.error('[Main] brainstorm:save-persona-settings:', err);
@@ -176,7 +188,7 @@ ipcMain.handle('brainstorm:save-persona-settings', async (_, { name, model, isol
 // IPC: Get persona settings (returns default if none saved)
 ipcMain.handle('brainstorm:get-persona-settings', async (_, { name }) => {
   const row = await getPersonaSettings(name);
-  return row || { model: 'qwen2.5-vl:latest', isolate: 0 };
+  return row || { model: 'qwen2.5-vl:latest', isolate: 0, context_length: 8192 };
 });
 
 // IPC: Get list of models from Ollama API
@@ -229,6 +241,24 @@ ipcMain.handle('brainstorm:clear', async (event) => {
   }
 });
 
+// IPC: Cleanup orphaned data (personas that no longer exist in /personas folder)
+ipcMain.handle('brainstorm:cleanup-orphaned-data', async () => {
+  try {
+    const personasDir = path.join(__dirname, 'personas');
+    const validPersonaNames = fs.existsSync(personasDir)
+      ? fs.readdirSync(personasDir, { withFileTypes: true })
+          .filter((f) => !f.isDirectory() && f.name.endsWith('.txt'))
+          .map((f) => f.name.replace('.txt', ''))
+      : [];
+    await cleanOrphanedPersonas(validPersonaNames);
+    console.log('[Main] brainstorm:cleanup-orphaned-data success');
+    return { success: true };
+  } catch (err) {
+    console.error('[Main] brainstorm:cleanup-orphaned-data:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 // IPC: Retrieve similar brainstorms (RAG context)
 ipcMain.handle('brainstorm:retrieve', async (_, { query, limit, persona, isolate }) => {
   console.log('[Main] brainstorm:retrieve received', { query, limit, persona, isolate });
@@ -261,8 +291,8 @@ ipcMain.handle('brainstorm:rag-chat', async (_, { modelPath, systemPrompt }) => 
 });
 
 // IPC: Stream RAG response (retrieve + LLM stream)
-ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, chatHistory, persona, isolate }) => {
-  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length, hasImage: !!image, chatHistoryLen: chatHistory?.length, persona, isolate });
+ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, chatHistory, persona, isolate, contextLength }) => {
+  console.log('[Main] brainstorm:stream-rag received', { promptLength: prompt?.length, hasImage: !!image, chatHistoryLen: chatHistory?.length, persona, isolate, contextLength });
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) {
     console.error('[Main] brainstorm:stream-rag: no window');
@@ -270,7 +300,7 @@ ipcMain.handle('brainstorm:stream-rag', async (event, { prompt, image, chatHisto
   }
 
   try {
-    const promptPayload = { text: prompt, image: image ?? null, chatHistory: chatHistory ?? [], persona: persona ?? 'Global', isolate: isolate ?? false };
+    const promptPayload = { text: prompt, image: image ?? null, chatHistory: chatHistory ?? [], persona: persona ?? 'Global', isolate: isolate ?? false, contextLength: contextLength ?? 8192 };
     const finalText = await streamRagResponse('default', promptPayload, (chunk) => {
       win.webContents.send('brainstorm:stream-chunk', { chunk });
     });

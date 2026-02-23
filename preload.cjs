@@ -7,8 +7,8 @@ contextBridge.exposeInMainWorld('ltm', {
   getModels: () => ipcRenderer.invoke('brainstorm:get-models'),
   getPersonas: () => ipcRenderer.invoke('brainstorm:get-personas'),
   readPersona: (filePath) => ipcRenderer.invoke('brainstorm:read-persona', filePath),
-  savePersonaSettings: (name, model, isolate) =>
-    ipcRenderer.invoke('brainstorm:save-persona-settings', { name, model, isolate }),
+  savePersonaSettings: (name, model, isolate, contextLength) =>
+    ipcRenderer.invoke('brainstorm:save-persona-settings', { name, model, isolate, context_length: contextLength }),
   getPersonaSettings: (name) =>
     ipcRenderer.invoke('brainstorm:get-persona-settings', { name }),
 
@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('ltm', {
     ipcRenderer.invoke('brainstorm:retrieve', { query, limit }),
 
   clearMemory: () => ipcRenderer.invoke('brainstorm:clear'),
+  cleanupOrphanedData: () => ipcRenderer.invoke('brainstorm:cleanup-orphaned-data'),
 
   initRagChat: (modelPath, personaText) =>
     ipcRenderer.invoke('brainstorm:rag-chat', { modelPath, systemPrompt: personaText }),
@@ -31,7 +32,8 @@ contextBridge.exposeInMainWorld('ltm', {
       image: payload?.image ?? null,
       chatHistory: payload?.chatHistory ?? [],
       persona: payload?.persona ?? 'Global',
-      isolate: payload?.isolate ?? false
+      isolate: payload?.isolate ?? false,
+      contextLength: payload?.contextLength ?? 8192
     }),
 
   onStreamChunk: (callback) => {

@@ -24,7 +24,7 @@ function stripDataUrl(img) {
 }
 
 async function streamRagResponse(sessionId, promptPayload, onChunk) {
-  const { text: userText, image: userImage, chatHistory = [], persona, isolate } = promptPayload;
+  const { text: userText, image: userImage, chatHistory = [], persona, isolate, contextLength } = promptPayload;
   console.log('[LLM] streamRagResponse: starting', { sessionId, promptLength: userText?.length, hasImage: !!userImage, chatHistoryLen: chatHistory?.length, persona, isolate });
   const { retrieveSimilar } = require('./database.cjs');
   if (!activeModel) {
@@ -69,7 +69,7 @@ async function streamRagResponse(sessionId, promptPayload, onChunk) {
     const response = await fetch('http://localhost:11434/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: activeModel, messages, stream: true }),
+      body: JSON.stringify({ model: activeModel, messages, stream: true, options: { num_ctx: contextLength ?? 8192 } }),
     });
     if (!response.ok) {
       const errText = await response.text();

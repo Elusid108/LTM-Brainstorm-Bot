@@ -53,6 +53,12 @@ function initDatabase(dbPath) {
             )
           `);
 
+          db.run("ALTER TABLE persona_settings ADD COLUMN context_length INTEGER DEFAULT 8192", (alterErr) => {
+            if (alterErr && !alterErr.message.includes('duplicate column')) {
+              console.warn('[DB] ALTER TABLE context_length:', alterErr.message);
+            }
+          });
+
           db.run(`
             CREATE VIRTUAL TABLE IF NOT EXISTS vec_brainstorms USING vec0(
               brainstorm_id INTEGER PRIMARY KEY,
@@ -160,13 +166,14 @@ async function retrieveSimilar(query, limit = 5, options = {}) {
   });
 }
 
-function savePersonaSettings(name, model, isolate) {
+function savePersonaSettings(name, model, isolate, contextLength) {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('Database not initialized'));
     const isolateInt = isolate ? 1 : 0;
+    const ctx = contextLength ?? 8192;
     db.run(
-      'INSERT OR REPLACE INTO persona_settings (name, model, isolate) VALUES (?, ?, ?)',
-      [name, model || null, isolateInt],
+      'INSERT OR REPLACE INTO persona_settings (name, model, isolate, context_length) VALUES (?, ?, ?, ?)',
+      [name, model || null, isolateInt, ctx],
       (err) => {
         if (err) return reject(err);
         resolve();
@@ -178,8 +185,9 @@ function savePersonaSettings(name, model, isolate) {
 function getPersonaSettings(name) {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('Database not initialized'));
-    db.get('SELECT name, model, isolate FROM persona_settings WHERE name = ?', [name], (err, row) => {
+    db.get('SELECT name, model, isolate, context_length FROM persona_settings WHERE name = ?', [name], (err, row) => {
       if (err) return reject(err);
+      if (row && row.context_length == null) row.context_length = 8192;
       resolve(row || null);
     });
   });

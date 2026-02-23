@@ -123,16 +123,23 @@ async function initRagSession() {
   }
 }
 
-function updateUploadButtonState() {
-  const modelSelect = document.getElementById('model-select');
+function checkVisionCapability(modelName) {
   const uploadBtn = document.getElementById('upload-img-btn');
-  if (!modelSelect || !uploadBtn) return;
-  const filename = (modelSelect.value || '').toLowerCase();
+  if (!uploadBtn) return;
+  const filename = (modelName || '').toLowerCase();
   const isVision = filename.includes('vl') || filename.includes('vision');
   if (isVision) {
     uploadBtn.removeAttribute('disabled');
+    uploadBtn.style.display = '';
   } else {
     uploadBtn.setAttribute('disabled', '');
+    uploadBtn.style.display = 'none';
+    if (imagePreviewContainer && currentBase64Image) {
+      currentBase64Image = null;
+      if (previewImg) previewImg.src = '';
+      imagePreviewContainer.style.display = 'none';
+    }
+    if (uploadBtn.textContent === '📷 Image Added') uploadBtn.textContent = '📷 Add Image';
   }
 }
 
@@ -254,6 +261,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
       const isolateChk = document.getElementById('isolate-memory-chk');
       if (isolateChk) isolateChk.checked = !!settings?.isolate;
+      const ctxSlider = document.getElementById('context-slider');
+      if (ctxSlider) ctxSlider.value = settings?.context_length ?? 8192;
+      const ctxVal = document.getElementById('context-value');
+      if (ctxVal) ctxVal.textContent = ctxSlider?.value ?? 8192;
     } finally {
       isInitialLoading = false;
     }
@@ -266,7 +277,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       console.log('[Renderer] Auto-loaded model + persona');
       appendSystemMessage('System loaded and ready.');
     }
-    updateUploadButtonState();
+    checkVisionCapability(modelSelect.value);
   } else {
     modelPath = await window.ltm.getDefaultModelPath();
     if (modelPath) {
@@ -285,7 +296,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const prevPath = modelPath;
     appendSystemMessage('Switching neural pathways... please standby.');
     localStorage.setItem('lastModel', newPath);
-    updateUploadButtonState();
+    checkVisionCapability(newPath);
 
     const init = await initRagSession();
     if (!init.success) {
@@ -295,7 +306,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       modelPath = newPath;
       appendSystemMessage('System loaded and ready.');
       const isolateChk = document.getElementById('isolate-memory-chk');
-      await window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk?.checked ?? false);
+      const ctxSlider = document.getElementById('context-slider');
+      await window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk?.checked ?? false, parseInt(ctxSlider?.value || 8192, 10));
     }
   });
 
@@ -322,18 +334,37 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
       const isolateChk = document.getElementById('isolate-memory-chk');
       if (isolateChk) isolateChk.checked = !!settings?.isolate;
+      const ctxSlider = document.getElementById('context-slider');
+      if (ctxSlider) ctxSlider.value = settings?.context_length ?? 8192;
+      const ctxVal = document.getElementById('context-value');
+      if (ctxVal) ctxVal.textContent = ctxSlider?.value ?? 8192;
 
       await initRagSession();
     } finally {
       isInitialLoading = false;
     }
+    checkVisionCapability(modelSelect.value);
   });
 
   const isolateChk = document.getElementById('isolate-memory-chk');
   if (isolateChk) {
     isolateChk.addEventListener('change', () => {
       if (isInitialLoading) return;
-      window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk.checked);
+      const ctxSlider = document.getElementById('context-slider');
+      window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk.checked, parseInt(ctxSlider?.value || 8192, 10));
+    });
+  }
+
+  // Context slider: display value and persist on change
+  const contextSlider = document.getElementById('context-slider');
+  const contextValue = document.getElementById('context-value');
+  if (contextSlider) {
+    contextSlider.addEventListener('input', () => {
+      if (contextValue) contextValue.textContent = contextSlider.value;
+    });
+    contextSlider.addEventListener('change', () => {
+      if (isInitialLoading) return;
+      window.ltm.savePersonaSettings(getCurrentPersonaName(), modelSelect.value, isolateChk?.checked ?? false, parseInt(contextSlider.value, 10));
     });
   }
 
@@ -398,7 +429,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Settings panel toggle
   const settingsBtn = document.getElementById('settings-btn');
   const settingsPanel = document.getElementById('settings-panel');
-  const settingsClose = document.getElementById('settings-close');
+  const settingsClose = document.getElementById('close-settings');
   if (settingsBtn && settingsPanel) {
     settingsBtn.addEventListener('click', () => settingsPanel.classList.toggle('closed'));
   }
@@ -476,7 +507,8 @@ async function onChat() {
       image: currentBase64Image,
       chatHistory: [...chatHistory],
       persona: currentPersona,
-      isolate: isIsolated
+      isolate: isIsolated,
+      contextLength: parseInt(document.getElementById('context-slider')?.value || 8192, 10)
     };
 
     if (currentBase64Image) {
@@ -495,6 +527,21 @@ async function onChat() {
 }
 
 btnChat.addEventListener('click', onChat);
+
+// Cleanup orphaned data: remove DB entries for deleted persona files
+document.getElementById('btn-cleanup-orphaned').addEventListener('click', async () => {
+  try {
+    const result = await window.ltm.cleanupOrphanedData();
+    if (result?.success) {
+      appendSystemMessage('Orphaned data cleaned successfully.');
+    } else {
+      appendLine(`Error: ${result?.error || 'Cleanup failed'}`, 'system');
+    }
+  } catch (e) {
+    console.error('[Renderer] Cleanup orphaned error:', e);
+    appendLine(`Error: ${e.message}`, 'system');
+  }
+});
 
 // Wipe LTM: clear database, chat UI, and show confirmation
 document.getElementById('btn-wipe-ltm').addEventListener('click', async () => {
