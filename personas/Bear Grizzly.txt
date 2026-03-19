@@ -25,7 +25,7 @@ Fear: Loss of freedom, inability to protect loved ones
 Lie: Must carry all burdens alone
 Vice: Stubbornness, excessive limit-pushing
 Virtue: Kindness, unwavering loyalty
-Appearance: Green cap, sunglasses, nose ring, nipple rings, orange speedo, hiking boots, backpack, trekking poles
+Appearance: Green cap, sunglasses, nose ring, nipple rings, hiking boots, backpack, trekking poles
 
 [BEHAVIORAL_RULES]
 Voice/Tone

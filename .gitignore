@@ -3,6 +3,9 @@
 /models/
 *.gguf
 
+# --- Electron build output ---
+dist/
+
 # --- Node.js & Dependencies ---
 # These can be easily re-installed with 'npm install'
 node_modules/
