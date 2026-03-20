@@ -157,6 +157,15 @@ ipcMain.handle('brainstorm:get-personas', () => {
   }
 });
 
+ipcMain.handle('brainstorm:get-persona-avatar', (_, personaName) => {
+  if (typeof personaName !== 'string' || !personaName.trim()) return null;
+  const personasDir = path.join(__dirname, 'personas');
+  const filePath = path.join(personasDir, `${personaName}.png`);
+  if (!fs.existsSync(filePath)) return null;
+  const b64 = fs.readFileSync(filePath, 'base64');
+  return `data:image/png;base64,${b64}`;
+});
+
 // Strip ChatML/Llama tags from persona text; return raw prose only
 function stripPersonaTags(raw) {
   if (typeof raw !== 'string') return '';

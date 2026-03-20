@@ -10,6 +10,12 @@
 <body>
   <div class="app">
     <div class="chat-container">
+      <div id="avatar-wrapper" style="display: none;">
+        <div id="avatar-container">
+          <img id="persona-avatar" src="" alt="Persona Avatar">
+        </div>
+        <button id="toggle-avatar-btn">▼ Hide Avatar</button>
+      </div>
       <div class="output" id="output">
         <div class="bubble system">
           <div class="bubble-content">Ready. Type a thought to ingest, or ask a question for RAG-assisted brainstorming.</div>
@@ -45,7 +51,7 @@
       <span id="status">Idle</span>
       <span id="vram-monitor">— MB</span>
       <span id="model-status">Model: not loaded</span>
-      <span id="version">v1.2.5</span>
+      <span id="version">v1.2.6</span>
       <button id="settings-btn" class="btn-icon" title="Settings">&#9881;</button>
     </div>
   </div>
@@ -69,7 +75,8 @@
       <div id="tab-database" class="settings-tab-panel">
         <p class="settings-desc">Database and storage options.</p>
         <label><input type="checkbox" id="isolate-memory-chk"> Isolate Memory</label>
-        <button id="btn-wipe-ltm" class="btn-wipe-ltm" title="Clear all Long-Term Memory">Wipe LTM</button>
+        <button id="btn-wipe-ltm" class="btn-wipe-ltm" disabled title="Clear all Long-Term Memory">Wipe LTM</button>
+        <small class="settings-desc" style="display: block; margin-top: 4px; margin-bottom: 8px;">Note: Wipe LTM has been disabled in the code to prevent data loss</small>
         <button id="btn-cleanup-orphaned" class="btn-wipe-ltm" title="Remove database entries for deleted persona files">Cleanup Orphaned Data</button>
       </div>
       <div id="tab-models" class="settings-tab-panel">

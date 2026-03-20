@@ -1,6 +1,6 @@
 {
   "name": "ltm-brainstorm",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Local-first JARVIS-style AI brainstorming assistant with Long-Term Memory",
   "main": "main.cjs",
   "type": "module",
@@ -40,7 +40,9 @@
       "output": "dist"
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "public/icon.png",
       "signAndEditExecutable": false
     },

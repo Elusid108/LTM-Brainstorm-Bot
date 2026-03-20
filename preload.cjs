@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('ltm', {
     ipcRenderer.invoke('brainstorm:get-default-model-path'),
   getModels: () => ipcRenderer.invoke('brainstorm:get-models'),
   getPersonas: () => ipcRenderer.invoke('brainstorm:get-personas'),
+  getPersonaAvatar: (name) => ipcRenderer.invoke('brainstorm:get-persona-avatar', name),
   readPersona: (filePath) => ipcRenderer.invoke('brainstorm:read-persona', filePath),
   savePersonaSettings: (name, model, isolate, contextLength, thinking) =>
     ipcRenderer.invoke('brainstorm:save-persona-settings', { name, model, isolate, context_length: contextLength, thinking }),

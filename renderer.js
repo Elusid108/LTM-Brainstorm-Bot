@@ -22,6 +22,24 @@ function getCurrentPersonaName() {
   return personaSelect?.options[personaSelect.selectedIndex]?.text || 'Global';
 }
 
+async function updateAvatar(personaName) {
+  const wrapper = document.getElementById('avatar-wrapper');
+  const img = document.getElementById('persona-avatar');
+  const toggleBtn = document.getElementById('toggle-avatar-btn');
+  if (!wrapper || !img) return;
+  const dataUrl = await window.ltm.getPersonaAvatar(personaName);
+  if (dataUrl) {
+    img.src = dataUrl;
+    wrapper.style.display = 'flex';
+    wrapper.classList.remove('collapsed');
+    if (toggleBtn) toggleBtn.textContent = '▼ Hide Avatar';
+  } else {
+    wrapper.style.display = 'none';
+    img.src = '';
+    if (toggleBtn) toggleBtn.textContent = '▼ Hide Avatar';
+  }
+}
+
 function updateStatusBar(personaName, modelName) {
   const personaLabel = document.getElementById('active-persona-label');
   const modelLabel = document.getElementById('active-model-label');
@@ -330,6 +348,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     personaSelect.value = analytical ? analytical.path : personas[0].path;
   }
 
+  await updateAvatar(getCurrentPersonaName());
+
+  const toggleAvatarBtn = document.getElementById('toggle-avatar-btn');
+  const avatarWrapper = document.getElementById('avatar-wrapper');
+  if (toggleAvatarBtn && avatarWrapper) {
+    toggleAvatarBtn.addEventListener('click', () => {
+      avatarWrapper.classList.toggle('collapsed');
+      toggleAvatarBtn.textContent = avatarWrapper.classList.contains('collapsed')
+        ? '▲ Show Avatar'
+        : '▼ Hide Avatar';
+    });
+  }
+
   if (models.length > 0) {
     isInitialLoading = true;
     try {
@@ -398,6 +429,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   personaSelect.addEventListener('change', async () => {
     const personaName = getCurrentPersonaName();
     localStorage.setItem('lastPersona', personaSelect.value);
+    await updateAvatar(personaName);
 
     isInitialLoading = true;
 
@@ -656,6 +688,8 @@ document.getElementById('btn-cleanup-orphaned').addEventListener('click', async 
 });
 
 // Wipe LTM: clear database, chat UI, and show confirmation
+// Disabled by user request
+/*
 document.getElementById('btn-wipe-ltm').addEventListener('click', async () => {
   try {
     const result = await window.ltm.clearMemory();
@@ -672,6 +706,7 @@ document.getElementById('btn-wipe-ltm').addEventListener('click', async () => {
     appendLine(`Error: ${e.message}`, 'system');
   }
 });
+*/
 
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
